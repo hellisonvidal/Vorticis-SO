@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""vorticis-rede — firewall e segurança de rede do Vorticis SO.
+
+Uso:
+  vorticis-rede status                   estado do firewall, DNS criptografado e portas abertas
+  vorticis-rede abrir PORTA/PROTO        ex.: vorticis-rede abrir 22/tcp
+  vorticis-rede fechar PORTA/PROTO
+  vorticis-rede carregar                 (usado pelo serviço) aplica regras e listas
+"""
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+REGRAS = Path(os.environ.get("VORTICIS_NFT", "/etc/vorticis/nftables.conf"))
+PORTAS = Path("/etc/vorticis/portas")
+INFANTIS = Path("/etc/vorticis/infantil-uids")
+
+
+def nft(*args, entrada=None):
+    return subprocess.run(["nft", *args], input=entrada, text=True, capture_output=True)
+
+
+def ler_lista(arq):
+    return [l.strip() for l in arq.read_text().splitlines() if l.strip() and not l.startswith("#")] if arq.exists() else []
+
+
+def exigir_root():
+    if os.geteuid() != 0:
+        sys.exit("Precisa de administrador (sudo).")
+
+
+def carregar(_a):
+    exigir_root()
+    r = nft("-f", str(REGRAS))
+    if r.returncode != 0:
+        sys.exit("Erro nas regras do firewall:\n" + r.stderr)
+    cmds = []
+    uids = [u for u in ler_lista(INFANTIS) if u.isdigit()]
+    if uids:
+        cmds.append(f"add element inet vorticis infantil_uids {{ {', '.join(uids)} }}")
+    for item in ler_lista(PORTAS):
+        porta, proto = item.split("/")
+        cmds.append(f"add element inet vorticis servicos_permitidos_{proto} {{ {porta} }}")
+    if cmds:
+        r = nft("-f", "-", entrada="\n".join(cmds) + "\n")
+        if r.returncode != 0:
+            sys.exit(r.stderr)
+    print(f"Firewall ativo · {len(uids)} conta(s) infantil(is) filtrada(s) · {len(ler_lista(PORTAS))} porta(s) aberta(s)")
+
+
+def validar(spec):
+    m = re.fullmatch(r"(\d{1,5})/(tcp|udp)", spec)
+    if not m or not 0 < int(m.group(1)) < 65536:
+        sys.exit("Formato: PORTA/tcp ou PORTA/udp (ex.: 22/tcp)")
+    return f"{int(m.group(1))}/{m.group(2)}"
+
+
+def abrir(a):
+    exigir_root()
+    spec = validar(a.porta)
+    atuais = ler_lista(PORTAS)
+    if spec not in atuais:
+        PORTAS.parent.mkdir(parents=True, exist_ok=True)
+        PORTAS.write_text("\n".join(atuais + [spec]) + "\n")
+    porta, proto = spec.split("/")
+    nft("add", "element", "inet", "vorticis", f"servicos_permitidos_{proto}", f"{{ {porta} }}")
+    print(f"Porta {spec} aberta para conexões de entrada (com limite de taxa).")
+
+
+def fechar(a):
+    exigir_root()
+    spec = validar(a.porta)
+    PORTAS.parent.mkdir(parents=True, exist_ok=True)
+    PORTAS.write_text("".join(p + "\n" for p in ler_lista(PORTAS) if p != spec))
+    porta, proto = spec.split("/")
+    nft("delete", "element", "inet", "vorticis", f"servicos_permitidos_{proto}", f"{{ {porta} }}")
+    print(f"Porta {spec} fechada.")
+
+
+def status(_a):
+    ativo = shutil.which("nft") and nft("list", "table", "inet", "vorticis").returncode == 0
+    print(f"  {'✔' if ativo else '✘'} Firewall (entrada bloqueada por padrão)" + ("" if ativo else " — rode: sudo systemctl start vorticis-rede"))
+    dot = ""
+    if shutil.which("resolvectl"):
+        dot = subprocess.run(["resolvectl", "status"], capture_output=True, text=True).stdout
+    print(f"  {'✔' if '+DNSOverTLS' in dot else '?'} DNS criptografado (DNS-over-TLS)")
+    nm = Path("/etc/NetworkManager/conf.d/90-vorticis-privacidade.conf").exists()
+    print(f"  {'✔' if nm else '✘'} MAC aleatório por rede Wi-Fi")
+    aa = Path("/sys/module/apparmor/parameters/enabled")
+    print(f"  {'✔' if aa.exists() and aa.read_text().strip() == 'Y' else '✘'} AppArmor (isolamento de aplicativos)")
+    portas = ler_lista(PORTAS)
+    print(f"  Portas abertas: {', '.join(portas) if portas else 'nenhuma'}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-rede", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("status").set_defaults(f=status)
+    sub.add_parser("carregar").set_defaults(f=carregar)
+    for n, f in (("abrir", abrir), ("fechar", fechar)):
+        p = sub.add_parser(n); p.add_argument("porta"); p.set_defaults(f=f)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

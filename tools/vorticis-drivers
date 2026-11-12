@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""vorticis-drivers — caça e instala os drivers e firmwares mais atuais para o hardware.
+
+Uso:
+  vorticis-drivers listar              mostra o hardware detectado
+  vorticis-drivers sugerir [--json]    lista drivers/firmwares recomendados
+  vorticis-drivers instalar [--auto] [--simular]
+  vorticis-drivers firmware [--simular]  atualiza BIOS/UEFI e firmware de dispositivos (fwupd/LVFS)
+
+Fontes de informação, em ordem:
+  1. Regras próprias do Vorticis (GPU, Wi-Fi, Bluetooth, microcódigo, impressoras)
+  2. isenkram-lookup (mapeia modalias → pacote Debian)
+  3. Firmware que o kernel tentou carregar e não achou (log do kernel)
+  4. nvidia-detect, para escolher a geração certa do driver NVIDIA
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+SYS = Path(os.environ.get("VORTICIS_SYSFS", "/sys"))
+
+VENDORS = {
+    "10de": "NVIDIA", "1002": "AMD", "8086": "Intel", "10ec": "Realtek", "14e4": "Broadcom",
+    "168c": "Qualcomm Atheros", "17cb": "Qualcomm", "14c3": "MediaTek", "1969": "Qualcomm Atheros (Ethernet)",
+    "8087": "Intel", "0bda": "Realtek", "0a5c": "Broadcom", "0e8d": "MediaTek", "04f9": "Brother",
+    "03f0": "HP", "04a9": "Canon", "04b8": "Epson", "1d6b": "Linux Foundation", "15ad": "VMware", "80ee": "VirtualBox",
+    "1af4": "Red Hat (VirtIO)", "1b36": "Red Hat (QEMU)",
+}
+
+# Classe PCI (2 primeiros bytes) → categoria
+CLASSES_PCI = {"0300": "vídeo", "0302": "vídeo", "0380": "vídeo", "0200": "rede cabeada", "0280": "wi-fi",
+               "0403": "áudio", "0c03": "usb", "0106": "armazenamento", "0108": "armazenamento (NVMe)",
+               "0d11": "bluetooth"}
+# Classe de interface USB → categoria
+CLASSES_USB = {"e0": "bluetooth", "07": "impressora", "0e": "câmera", "01": "áudio", "08": "armazenamento", "03": "entrada (HID)"}
+
+
+def ler(p):
+    try:
+        return Path(p).read_text().strip()
+    except OSError:
+        return ""
+
+
+def dispositivos_pci():
+    base = SYS / "bus/pci/devices"
+    for d in sorted(base.glob("*")) if base.exists() else []:
+        classe = ler(d / "class").replace("0x", "")[:4]
+        vendor = ler(d / "vendor").replace("0x", "")
+        device = ler(d / "device").replace("0x", "")
+        driver = Path(os.readlink(d / "driver")).name if (d / "driver").is_symlink() else None
+        yield {"barramento": "pci", "endereco": d.name, "vendor": vendor, "device": device,
+               "fabricante": VENDORS.get(vendor, vendor), "categoria": CLASSES_PCI.get(classe, "outro"),
+               "classe": classe, "driver": driver, "modalias": ler(d / "modalias")}
+
+
+def dispositivos_usb():
+    base = SYS / "bus/usb/devices"
+    for d in sorted(base.glob("*")) if base.exists() else []:
+        if ":" in d.name or not (d / "idVendor").exists():
+            continue
+        vendor, produto = ler(d / "idVendor"), ler(d / "idProduct")
+        if vendor == "1d6b":  # hubs raiz
+            continue
+        classes = {ler(i / "bInterfaceClass") for i in d.glob(f"{d.name}:*")}
+        cat = next((CLASSES_USB[c] for c in classes if c in CLASSES_USB), "outro")
+        yield {"barramento": "usb", "endereco": d.name, "vendor": vendor, "device": produto,
+               "fabricante": VENDORS.get(vendor, vendor), "categoria": cat,
+               "nome": ler(d / "product"), "driver": None, "modalias": ""}
+
+
+def fabricante_cpu():
+    info = ler("/proc/cpuinfo")
+    if "GenuineIntel" in info:
+        return "intel"
+    if "AuthenticAMD" in info:
+        return "amd"
+    return None
+
+
+def firmware_faltando():
+    """Arquivos de firmware que o kernel pediu e não encontrou."""
+    texto = ""
+    for cmd in (["journalctl", "-k", "-b", "--no-pager", "-q"], ["dmesg"]):
+        if shutil.which(cmd[0]):
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            if r.returncode == 0:
+                texto = r.stdout
+                break
+    padroes = [r"firmware: failed to load (\S+)", r"Direct firmware load for (\S+) failed",
+               r"failed to load firmware (\S+)"]
+    achados = set()
+    for p in padroes:
+        achados.update(m.rstrip(".,:") for m in re.findall(p, texto))
+    return sorted(achados)
+
+
+FIRMWARE_POR_PREFIXO = {
+    "iwlwifi": "firmware-iwlwifi", "rtw88": "firmware-realtek", "rtw89": "firmware-realtek", "rtl": "firmware-realtek",
+    "amdgpu": "firmware-amd-graphics", "radeon": "firmware-amd-graphics", "i915": "firmware-misc-nonfree",
+    "nvidia": "firmware-misc-nonfree", "ath": "firmware-atheros", "qca": "firmware-atheros", "brcm": "firmware-brcm80211",
+    "mediatek": "firmware-mediatek", "mt7": "firmware-mediatek", "intel/ibt": "firmware-iwlwifi", "sof": "firmware-sof-signed",
+    "intel/sof": "firmware-sof-signed", "regulatory.db": "wireless-regdb",
+}
+
+
+def sugerir():
+    """Retorna lista de (pacote, motivo)."""
+    sug = {}
+
+    def add(pac, motivo):
+        sug.setdefault(pac, motivo)
+
+    pci = list(dispositivos_pci())
+    usb = list(dispositivos_usb())
+
+    cpu = fabricante_cpu()
+    if cpu:
+        add(f"{cpu}64-microcode" if cpu == "amd" else "intel-microcode", "correções de segurança e estabilidade da CPU")
+
+    for d in pci:
+        v, cat = d["vendor"], d["categoria"]
+        if cat == "vídeo":
+            add("mesa-vulkan-drivers", "Vulkan (necessário para DXVK/Proton e jogos)")
+            add("mesa-vulkan-drivers:i386", "Vulkan 32 bits (jogos Windows antigos)")
+            if v == "10de":
+                pacote = "nvidia-driver"
+                if shutil.which("nvidia-detect"):
+                    saida = subprocess.run(["nvidia-detect"], capture_output=True, text=True).stdout
+                    m = re.search(r"install the\s+(\S+)\s+package", saida)
+                    if m:
+                        pacote = m.group(1)
+                add(pacote, f"driver proprietário NVIDIA para {d['device']} (melhor desempenho em jogos)")
+                add("firmware-misc-nonfree", "firmware de GPU NVIDIA")
+                add("nvidia-vaapi-driver", "aceleração de vídeo no navegador")
+            elif v == "1002":
+                add("firmware-amd-graphics", "firmware da GPU AMD (amdgpu)")
+                add("mesa-va-drivers", "aceleração de vídeo (VA-API)")
+            elif v == "8086":
+                add("intel-media-va-driver-non-free", "aceleração de vídeo Intel (VA-API)")
+            elif v in ("15ad", "80ee", "1af4", "1b36"):
+                add("spice-vdagent" if v in ("1af4", "1b36") else "open-vm-tools-desktop" if v == "15ad" else "virtualbox-guest-x11",
+                    "integração com a máquina virtual (área de transferência, resolução)")
+        elif cat == "wi-fi" or (cat == "rede cabeada" and v == "10ec"):
+            mapa = {"8086": "firmware-iwlwifi", "10ec": "firmware-realtek", "168c": "firmware-atheros",
+                    "17cb": "firmware-atheros", "14c3": "firmware-mediatek", "14e4": "firmware-brcm80211"}
+            if v in mapa:
+                add(mapa[v], f"firmware de rede {d['fabricante']}")
+            if v == "14e4" and not d["driver"]:
+                add("broadcom-sta-dkms", "driver Wi-Fi Broadcom (wl) — usado quando brcmfmac não suporta o chip")
+        elif cat == "áudio" and v == "8086":
+            add("firmware-sof-signed", "firmware de áudio Intel SOF (notebooks recentes)")
+
+    for d in usb:
+        if d["categoria"] == "bluetooth":
+            mapa = {"8087": "firmware-iwlwifi", "0bda": "firmware-realtek", "0a5c": "firmware-brcm80211", "0e8d": "firmware-mediatek"}
+            if d["vendor"] in mapa:
+                add(mapa[d["vendor"]], f"firmware Bluetooth {d['fabricante']}")
+        elif d["categoria"] == "impressora":
+            add("ipp-usb", "impressão sem driver (IPP over USB)")
+            extras = {"03f0": "hplip", "04f9": "printer-driver-brlaser", "04b8": "printer-driver-escpr", "04a9": "printer-driver-gutenprint"}
+            add(extras.get(d["vendor"], "printer-driver-all"), f"driver da impressora {d.get('nome') or d['fabricante']}")
+        elif d["categoria"] == "câmera":
+            add("v4l-utils", "ferramentas da webcam")
+
+    for fw in firmware_faltando():
+        for prefixo, pacote in FIRMWARE_POR_PREFIXO.items():
+            if fw.startswith(prefixo):
+                add(pacote, f"o kernel pediu o firmware '{fw}' e não encontrou")
+                break
+
+    if shutil.which("isenkram-lookup"):
+        r = subprocess.run(["isenkram-lookup"], capture_output=True, text=True)
+        for linha in r.stdout.split():
+            add(linha.strip(), "recomendado pelo isenkram para o hardware detectado")
+
+    instalados = pacotes_instalados(list(sug))
+    return [{"pacote": p, "motivo": m, "instalado": p in instalados} for p, m in sug.items()]
+
+
+def pacotes_instalados(nomes):
+    if not nomes or not shutil.which("dpkg-query"):
+        return set()
+    r = subprocess.run(["dpkg-query", "-W", "-f=${Package} ${db:Status-Status}\n"] + [n.split(":")[0] for n in nomes],
+                       capture_output=True, text=True)
+    ok = set()
+    for linha in r.stdout.splitlines():
+        partes = linha.split()
+        if len(partes) == 2 and partes[1] == "installed":
+            ok.add(partes[0])
+    # Pacotes com arquitetura explícita (ex.: :i386) contam pelo nome base.
+    return ok | {n for n in nomes if n.split(":")[0] in ok}
+
+
+def rodar(cmd, simular):
+    if os.geteuid() != 0:
+        cmd = ["pkexec"] + cmd if shutil.which("pkexec") else ["sudo"] + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd))
+    return 0 if simular else subprocess.run(cmd).returncode
+
+
+def cmd_listar(_a):
+    for d in list(dispositivos_pci()) + list(dispositivos_usb()):
+        nome = d.get("nome") or ""
+        print(f"[{d['barramento']}] {d['categoria']:<22} {d['fabricante']:<18} {d['vendor']}:{d['device']}  "
+              f"driver={d['driver'] or '-'} {nome}")
+
+
+def cmd_sugerir(a):
+    lista = sugerir()
+    if a.json:
+        print(json.dumps(lista, ensure_ascii=False, indent=2))
+        return
+    if not lista:
+        print("Nenhum driver adicional necessário. ✔")
+    for s in lista:
+        print(f"  {'✔' if s['instalado'] else '•'} {s['pacote']:<34} {s['motivo']}")
+
+
+def cmd_instalar(a):
+    faltando = [s for s in sugerir() if not s["instalado"]]
+    if not faltando:
+        print("Tudo atualizado. ✔")
+        return
+    print("Serão instalados:")
+    for s in faltando:
+        print(f"  • {s['pacote']} — {s['motivo']}")
+    if not (a.auto or a.simular):
+        if input("Continuar? [S/n] ").strip().lower() not in ("", "s", "sim", "y"):
+            return
+    if any(":i386" in s["pacote"] for s in faltando):
+        rodar(["dpkg", "--add-architecture", "i386"], a.simular)
+    rodar(["apt-get", "update"], a.simular)
+    rodar(["apt-get", "install", "-y", "--no-install-recommends"] + [s["pacote"] for s in faltando], a.simular)
+    print("Reinicie o computador para carregar os novos drivers.")
+
+
+def cmd_firmware(a):
+    if not shutil.which("fwupdmgr"):
+        sys.exit("fwupd não instalado: apt install fwupd")
+    rodar(["fwupdmgr", "refresh", "--force"], a.simular)
+    if a.simular:
+        print("[simulação] fwupdmgr get-updates")
+        return
+    subprocess.run(["fwupdmgr", "get-updates"])
+    if a.auto:
+        rodar(["fwupdmgr", "update", "-y", "--no-reboot-check"], a.simular)
+    else:
+        print("Para aplicar: vorticis-drivers firmware --auto")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-drivers", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("listar").set_defaults(f=cmd_listar)
+    p = sub.add_parser("sugerir"); p.add_argument("--json", action="store_true"); p.set_defaults(f=cmd_sugerir)
+    p = sub.add_parser("instalar"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_instalar)
+    p = sub.add_parser("firmware"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_firmware)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""vorticis-shell — inicia a área de trabalho do Vorticis SO no compositor Wayland.
+
+Cria duas superfícies (protocolo wlr-layer-shell):
+  * papel de parede  — camada BACKGROUND, tela inteira, água interativa;
+  * barra de tarefas — camada TOP, ancorada embaixo, reserva espaço (exclusive zone).
+Quando um menu abre, a barra cresce para a tela inteira e recebe o teclado.
+
+Dependências (Debian 13): python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0
+"""
+import ctypes.util
+import json
+import os
+import pwd
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+# gtk4-layer-shell precisa ser carregada antes da libwayland.
+_lib = ctypes.util.find_library("gtk4-layer-shell")
+if _lib and "LD_PRELOAD" not in os.environ:
+    os.environ["LD_PRELOAD"] = _lib
+    os.execvp(sys.executable, [sys.executable] + sys.argv)
+
+import gi  # noqa: E402
+gi.require_version("Gtk", "4.0")
+gi.require_version("WebKit", "6.0")
+gi.require_version("Gtk4LayerShell", "1.0")
+from gi.repository import Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
+
+RAIZ = Path(os.environ.get("VORTICIS_SHELL_DIR", "/usr/share/vorticis/shell"))
+ALTURA_BARRA = 64
+
+
+def usuario_atual():
+    login = pwd.getpwuid(os.getuid()).pw_name
+    nome = (pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0] or login).strip()
+    nivel, perfil = "padrao", "basico"
+    arq = Path("/etc/vorticis/usuarios")
+    if arq.exists():
+        for linha in arq.read_text().splitlines():
+            partes = linha.split(":")
+            if len(partes) == 3 and partes[0] == login:
+                nivel, perfil = partes[1], partes[2]
+    rotulos = {"admin": "Administrador", "padrao": "Padrão", "convidado": "Convidado", "infantil": "Infantil"}
+    return {"nome": nome, "nivel": rotulos.get(nivel, nivel), "perfil": perfil}
+
+
+class Superficie:
+    def __init__(self, app, modo):
+        self.modo = modo
+        self.janela = Gtk.ApplicationWindow(application=app)
+        LS.init_for_window(self.janela)
+        LS.set_namespace(self.janela, f"vorticis-{modo}")
+        if modo == "papel":
+            LS.set_layer(self.janela, LS.Layer.BACKGROUND)
+            for borda in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+                LS.set_anchor(self.janela, borda, True)
+            LS.set_exclusive_zone(self.janela, -1)
+        else:
+            LS.set_layer(self.janela, LS.Layer.TOP)
+            for borda in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+                LS.set_anchor(self.janela, borda, True)
+            LS.set_exclusive_zone(self.janela, ALTURA_BARRA)
+            self.janela.set_default_size(-1, ALTURA_BARRA)
+
+        gerente = WebKit.UserContentManager()
+        gerente.register_script_message_handler("vorticis", None)
+        gerente.connect("script-message-received::vorticis", self.mensagem)
+        usuario = json.dumps(usuario_atual(), ensure_ascii=False)
+        gerente.add_script(WebKit.UserScript.new(
+            f"window.VORTICIS_USUARIO = {usuario};",
+            WebKit.UserContentInjectedFrames.TOP_FRAME, WebKit.UserScriptInjectionTime.START, None, None))
+
+        self.web = WebKit.WebView(user_content_manager=gerente)
+        cfg = self.web.get_settings()
+        cfg.set_allow_file_access_from_file_urls(True)
+        cfg.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.ALWAYS)
+        if modo == "barra":
+            from gi.repository import Gdk
+            self.web.set_background_color(Gdk.RGBA(0, 0, 0, 0))
+        self.web.load_uri((RAIZ / "index.html").as_uri() + f"?modo={modo}")
+        self.janela.set_child(self.web)
+        self.janela.present()
+
+    def mensagem(self, _gerente, valor):
+        try:
+            dados = json.loads(valor.to_string())
+        except Exception:
+            return
+        acao = dados.get("acao")
+        if acao == "abrir":
+            # Comando vem do catálogo local do shell; executa sem shell para evitar injeção.
+            try:
+                subprocess.Popen(shlex.split(dados.get("cmd", "")), start_new_session=True)
+            except (OSError, ValueError) as e:
+                print("vorticis-shell: falha ao abrir", dados.get("app"), e, file=sys.stderr)
+        elif acao == "painel" and self.modo == "barra":
+            aberto = bool(dados.get("aberto"))
+            LS.set_anchor(self.janela, LS.Edge.TOP, aberto)
+            LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND if aberto else LS.KeyboardMode.NONE)
+        elif acao == "preferencia":
+            chamada = f"window.vorticisPreferencia({json.dumps(dados.get('chave'))}, {json.dumps(dados.get('valor'))})"
+            for outra in SUPERFICIES:
+                if outra is not self:
+                    outra.web.evaluate_javascript(chamada, -1, None, None, None, None, None)
+        elif acao == "energia":
+            subprocess.Popen(["vorticis-recursos", "energia", "desempenho" if dados.get("perfil") == "desempenho" else "equilibrado"])
+
+
+SUPERFICIES = []
+
+
+def ativar(app):
+    SUPERFICIES.extend([Superficie(app, "papel"), Superficie(app, "barra")])
+
+
+if __name__ == "__main__":
+    aplicacao = Gtk.Application(application_id="org.vorticis.Shell")
+    aplicacao.connect("activate", ativar)
+    aplicacao.run(None)

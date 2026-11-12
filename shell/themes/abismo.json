@@ -1,0 +1,25 @@
+{
+  "id": "abismo",
+  "nome": "Abismo",
+  "descricao": "Escuro e profundo, ideal para a noite. Água lenta, sem gotas ambientes.",
+  "animado": true,
+  "fundoEstatico": "linear-gradient(180deg, #0a2540 0%, #010812 100%)",
+  "cores": {
+    "destaque": "#5ad1e6",
+    "destaqueForte": "#1fa2c2",
+    "texto": "#dff7fb",
+    "textoSuave": "#88aab3",
+    "painel": "rgba(2, 10, 20, 0.72)",
+    "painelBorda": "rgba(90, 209, 230, 0.18)",
+    "item": "rgba(255, 255, 255, 0.05)",
+    "itemHover": "rgba(90, 209, 230, 0.16)"
+  },
+  "agua": {
+    "corFundo": "#00060f",
+    "corMeio": "#0b3554",
+    "corBrilho": "#7fe3f5",
+    "causticas": 0.18,
+    "amortecimento": 0.99,
+    "gotasAmbiente": false
+  }
+}

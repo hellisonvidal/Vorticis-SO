@@ -1,0 +1,36 @@
+---
+componentName: vorticis
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 900px,620px
+windowPlacement: center
+sidebar: widget
+navigation: widget
+
+strings:
+  productName:         Vorticis SO
+  shortProductName:    Vorticis
+  version:             0.1
+  shortVersion:        0.1
+  versionedName:       Vorticis SO 0.1 "Nascente"
+  shortVersionedName:  Vorticis 0.1
+  bootloaderEntryName: Vorticis
+  productUrl:          https://github.com/hellisonvidal/Vorticis-SO
+  supportUrl:          https://github.com/hellisonvidal/Vorticis-SO/issues
+  knownIssuesUrl:      https://github.com/hellisonvidal/Vorticis-SO/issues
+  releaseNotesUrl:     https://github.com/hellisonvidal/Vorticis-SO/releases
+
+images:
+  productLogo:         "logo.svg"
+  productIcon:         "logo.svg"
+  productWelcome:      "logo.svg"
+
+slideshow:             "show.qml"
+slideshowAPI:          2
+
+style:
+  SidebarBackground:        "#06203f"
+  SidebarText:              "#eaf6ff"
+  SidebarTextCurrent:       "#ffffff"
+  SidebarBackgroundCurrent: "#0a84ff"

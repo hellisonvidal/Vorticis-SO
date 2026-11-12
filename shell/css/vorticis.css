@@ -1,0 +1,161 @@
+:root {
+  --destaque: #38b6ff;
+  --destaque-forte: #0a84ff;
+  --texto: #eaf6ff;
+  --texto-suave: #a9cbe6;
+  --painel: rgba(6, 30, 64, 0.62);
+  --painel-borda: rgba(140, 210, 255, 0.22);
+  --item: rgba(255, 255, 255, 0.07);
+  --item-hover: rgba(120, 200, 255, 0.2);
+  --altura-barra: 56px;
+  --icone-barra: 26px;
+  --raio: 14px;
+  --fonte: "Inter", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  font-family: var(--fonte); color: var(--texto); background: #03214a;
+  user-select: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+
+#papel { position: fixed; inset: 0; z-index: 0; }
+.agua-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+#area {
+  position: fixed; inset: 0 0 var(--altura-barra) 0; z-index: 1;
+  pointer-events: none; display: flex; align-items: flex-start; justify-content: flex-end; padding: 40px 48px;
+}
+.relogio-grande { text-align: right; text-shadow: 0 2px 18px rgba(0, 20, 50, .45); }
+#hora-grande { font-size: clamp(48px, 9vw, 104px); font-weight: 200; letter-spacing: -2px; line-height: 1; }
+#data-grande { font-size: 18px; color: var(--texto-suave); margin-top: 8px; }
+#data-grande::first-letter { text-transform: uppercase; }
+
+/* ---------------- Painéis vidro ---------------- */
+.painel {
+  position: fixed; z-index: 10; bottom: calc(var(--altura-barra) + 12px);
+  background: var(--painel); border: 1px solid var(--painel-borda); border-radius: 20px;
+  backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 20px 60px rgba(0, 10, 30, .45);
+  padding: 20px; animation: surgir .18s ease-out;
+}
+.painel[hidden] { display: none; }
+.painel h2 { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--texto-suave); margin: 16px 4px 10px; }
+.painel h3 { font-size: 14px; font-weight: 600; margin: 18px 4px 8px; }
+@keyframes surgir { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+
+/* Navegadores/GPUs sem backdrop-filter: painel mais opaco. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .painel { background: rgba(6, 30, 64, .95); }
+}
+body.modo-leve .painel { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+#menu { left: 50%; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; }
+#menu { animation-name: surgirCentro; }
+@keyframes surgirCentro { from { opacity: 0; transform: translate(-50%, 12px); } }
+
+#busca {
+  width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--painel-borda);
+  background: var(--item); color: var(--texto); font: inherit; outline: none;
+}
+#busca:focus { border-color: var(--destaque); box-shadow: 0 0 0 3px color-mix(in srgb, var(--destaque) 30%, transparent); }
+
+.grade-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.app {
+  border: 0; background: transparent; border-radius: var(--raio); padding: 12px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12.5px; text-align: center;
+}
+.app:hover, .app:focus-visible { background: var(--item-hover); outline: none; }
+.app .icone, .fixado .icone {
+  width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 24px;
+  background: linear-gradient(145deg, var(--cor-app, #1e7fd0), color-mix(in srgb, var(--cor-app, #1e7fd0) 55%, #001022));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 4px 10px rgba(0, 0, 0, .2);
+}
+.app small { color: var(--texto-suave); font-size: 10.5px; }
+
+.menu-rodape {
+  display: flex; justify-content: space-between; align-items: center; margin-top: 16px;
+  padding-top: 14px; border-top: 1px solid var(--painel-borda);
+}
+.usuario { display: flex; align-items: center; gap: 10px; }
+.usuario small { display: block; color: var(--texto-suave); font-size: 12px; }
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700;
+  background: linear-gradient(135deg, var(--destaque), var(--destaque-forte));
+}
+.acoes button { border: 0; background: var(--item); width: 38px; height: 38px; border-radius: 10px; margin-left: 4px; }
+.acoes button:hover { background: var(--item-hover); }
+
+#config { right: 12px; width: min(380px, calc(100vw - 24px)); }
+.lista-temas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tema {
+  border: 2px solid transparent; border-radius: 12px; padding: 0; overflow: hidden; background: var(--item);
+  text-align: left; font-size: 12px;
+}
+.tema .amostra { height: 54px; }
+.tema span { display: block; padding: 6px 8px; }
+.tema[aria-pressed="true"] { border-color: var(--destaque); }
+
+.segmentado { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--item); border-radius: 10px; padding: 3px; gap: 3px; }
+.segmentado button { border: 0; background: transparent; padding: 8px 4px; border-radius: 8px; font-size: 12px; }
+.segmentado button[aria-pressed="true"] { background: var(--destaque-forte); color: #fff; }
+.dica { font-size: 12px; color: var(--texto-suave); margin: 8px 4px 0; }
+
+.lista-perfis { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.perfil { border: 2px solid transparent; background: var(--item); border-radius: 12px; padding: 10px; font-size: 13px; }
+.perfil b { display: block; font-size: 22px; margin-bottom: 4px; }
+.perfil[aria-pressed="true"] { border-color: var(--destaque); }
+
+/* ---------------- Barra de tarefas ---------------- */
+#barra {
+  position: fixed; left: 0; right: 0; bottom: 0; height: var(--altura-barra); z-index: 20;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 0 12px;
+  background: var(--painel); border-top: 1px solid var(--painel-borda);
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+body.modo-leve #barra { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.botao-iniciar {
+  width: 42px; height: 42px; border: 0; border-radius: 12px; background: var(--item); display: grid; place-items: center;
+}
+.botao-iniciar:hover, .botao-iniciar[aria-expanded="true"] { background: var(--item-hover); }
+.fixados { display: flex; justify-content: center; gap: 4px; overflow: hidden; }
+.fixado {
+  border: 0; background: transparent; border-radius: 12px; padding: 5px 8px; display: flex; align-items: center; gap: 8px;
+  position: relative; transition: background .12s;
+}
+.fixado:hover { background: var(--item-hover); }
+.fixado .icone { width: calc(var(--icone-barra) + 8px); height: calc(var(--icone-barra) + 8px); font-size: calc(var(--icone-barra) * .7); border-radius: 9px; }
+.fixado .rotulo { font-size: 13px; display: none; }
+body.barra-rotulos .fixado .rotulo { display: inline; }
+.fixado.aberto::after {
+  content: ""; position: absolute; bottom: 1px; left: 50%; width: 14px; height: 3px; margin-left: -7px;
+  border-radius: 2px; background: var(--destaque);
+}
+.bandeja { display: flex; align-items: center; gap: 12px; font-size: 15px; }
+.chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--item); }
+#relogio { font-size: 13px; text-align: right; line-height: 1.2; min-width: 64px; font-variant-numeric: tabular-nums; }
+
+body.barra-grande { --altura-barra: 64px; --icone-barra: 30px; }
+body.barra-pequeno { --altura-barra: 46px; --icone-barra: 20px; }
+
+.aviso {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 30;
+  background: var(--painel); border: 1px solid var(--painel-borda); border-radius: 12px; padding: 12px 18px;
+  font-size: 14px; backdrop-filter: blur(18px); box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+}
+
+@media (max-width: 640px) {
+  #area { padding: 24px 16px; justify-content: center; }
+  .relogio-grande { text-align: center; }
+  .bandeja > span:not(#indicador-perfil) { display: none; }
+  .fixado .rotulo { display: none !important; }
+  .lista-temas { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---------------- Modos dentro do SO (camadas separadas) ---------------- */
+body.modo-papel #barra, body.modo-papel .painel, body.modo-papel #aviso { display: none !important; }
+body.modo-papel #area { inset: 0; }
+body.modo-barra { background: transparent !important; }
+body.modo-barra #papel, body.modo-barra #area { display: none; }

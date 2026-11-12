@@ -1,0 +1,50 @@
+# Sessão gráfica leve (Wayland)
+labwc
+xwayland
+greetd
+tuigreet
+swayidle
+swaylock
+foot
+fuzzel
+mako-notifier
+wl-clipboard
+grim
+slurp
+xdg-desktop-portal-wlr
+xdg-desktop-portal-gtk
+xdg-user-dirs
+# Shell Vorticis (WebKitGTK + layer-shell)
+python3-gi
+gir1.2-gtk-4.0
+gir1.2-webkit-6.0
+gir1.2-gtk4layershell-1.0
+libgtk4-layer-shell0
+# Gráficos
+mesa-vulkan-drivers
+mesa-va-drivers
+vulkan-tools
+# Áudio, rede, Bluetooth, impressão
+pipewire-audio
+wireplumber
+pavucontrol
+network-manager
+network-manager-gnome
+bluez
+blueman
+cups
+ipp-usb
+printer-driver-all
+# Aplicativos essenciais
+nautilus
+loupe
+gnome-software
+gnome-software-plugin-flatpak
+gnome-calendar
+libreoffice-gtk3
+libreoffice-l10n-pt-br
+thunderbird
+rhythmbox
+fonts-inter
+fonts-noto-color-emoji
+fonts-noto-core

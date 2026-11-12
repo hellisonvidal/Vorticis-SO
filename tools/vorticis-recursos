@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""vorticis-recursos — administra memória, armazenamento e energia de forma inteligente.
+
+Uso:
+  vorticis-recursos status                 resumo de memória, swap, discos e processos
+  vorticis-recursos aplicar [--simular]    ajusta zram, OOM, sysctl e TRIM conforme o hardware
+  vorticis-recursos limpar [--simular]     remove caches, logs antigos e lixeira > 30 dias
+  vorticis-recursos energia {economia,equilibrado,desempenho}
+  vorticis-recursos painel                 monitor ao vivo no terminal
+"""
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def meminfo():
+    dados = {}
+    for linha in Path("/proc/meminfo").read_text().splitlines():
+        chave, valor = linha.split(":", 1)
+        dados[chave] = int(valor.split()[0]) * 1024
+    return dados
+
+
+def gb(b):
+    return f"{b / 1024**3:.1f} GB"
+
+
+def barra(frac, largura=24):
+    cheio = int(round(frac * largura))
+    return "█" * cheio + "░" * (largura - cheio)
+
+
+def processos_mais_pesados(n=5):
+    procs = []
+    for p in Path("/proc").iterdir():
+        if not p.name.isdigit():
+            continue
+        try:
+            rss = 0
+            for linha in (p / "status").read_text().splitlines():
+                if linha.startswith("VmRSS:"):
+                    rss = int(linha.split()[1]) * 1024
+            nome = (p / "comm").read_text().strip()
+            procs.append((rss, nome, int(p.name)))
+        except OSError:
+            continue
+    return sorted(procs, reverse=True)[:n]
+
+
+def perfil_hardware():
+    m = meminfo()
+    ram = m["MemTotal"]
+    nucleos = os.cpu_count() or 1
+    ssd = any(Path(f"/sys/block/{d}/queue/rotational").read_text().strip() == "0"
+              for d in os.listdir("/sys/block") if not d.startswith(("loop", "ram", "zram"))
+              and Path(f"/sys/block/{d}/queue/rotational").exists())
+    bateria = any(Path("/sys/class/power_supply").glob("BAT*"))
+    return {"ram": ram, "nucleos": nucleos, "ssd": ssd, "bateria": bateria,
+            "classe": "modesto" if ram < 4 * 1024**3 or nucleos <= 2 else "padrao" if ram < 12 * 1024**3 else "potente"}
+
+
+def cmd_status(_a):
+    m = meminfo()
+    usada = m["MemTotal"] - m["MemAvailable"]
+    swap_usada = m["SwapTotal"] - m["SwapFree"]
+    hw = perfil_hardware()
+    print(f"Hardware: {hw['nucleos']} núcleos · {gb(hw['ram'])} RAM · {'SSD' if hw['ssd'] else 'HDD'} · "
+          f"{'notebook' if hw['bateria'] else 'desktop'} → perfil '{hw['classe']}'\n")
+    print(f"Memória  {barra(usada / m['MemTotal'])} {gb(usada)} / {gb(m['MemTotal'])}")
+    if m["SwapTotal"]:
+        print(f"Swap     {barra(swap_usada / m['SwapTotal'])} {gb(swap_usada)} / {gb(m['SwapTotal'])}")
+    print()
+    vistos = set()
+    for linha in Path("/proc/mounts").read_text().splitlines():
+        disp, ponto, tipo = linha.split()[:3]
+        if not disp.startswith("/dev/") or disp in vistos or tipo in ("squashfs", "iso9660"):
+            continue
+        vistos.add(disp)
+        u = shutil.disk_usage(ponto)
+        if u.total < 1024**3:  # ignora partições minúsculas (EFI, montagens internas)
+            continue
+        alerta = "  ⚠ pouco espaço — rode 'vorticis-recursos limpar'" if u.free / u.total < 0.1 else ""
+        print(f"Disco {ponto:<10} {barra(u.used / u.total)} {gb(u.used)} / {gb(u.total)}{alerta}")
+    print("\nProcessos que mais usam memória:")
+    for rss, nome, pid in processos_mais_pesados():
+        print(f"  {gb(rss):>8}  {nome} (pid {pid})")
+
+
+class Exec:
+    def __init__(self, simular):
+        self.simular = simular
+
+    def cmd(self, c, checar=False):
+        print(("[simulação] " if self.simular else "→ ") + " ".join(c))
+        if not self.simular:
+            subprocess.run(c, check=checar)
+
+    def arquivo(self, caminho, conteudo):
+        print(("[simulação] " if self.simular else "→ ") + f"escrever {caminho}")
+        if self.simular:
+            print("   " + conteudo.strip().replace("\n", "\n   "))
+            return
+        Path(caminho).parent.mkdir(parents=True, exist_ok=True)
+        Path(caminho).write_text(conteudo)
+
+
+def exigir_root(simular):
+    if os.geteuid() != 0 and not simular:
+        sys.exit("Este comando precisa de privilégios de administrador (use sudo ou --simular).")
+
+
+def cmd_aplicar(a):
+    exigir_root(a.simular)
+    hw = perfil_hardware()
+    ex = Exec(a.simular)
+    print(f"Perfil de hardware: {hw['classe']} ({gb(hw['ram'])} RAM, {hw['nucleos']} núcleos)\n")
+
+    # 1. zram: swap comprimida em RAM — essencial para máquinas modestas.
+    fracao = {"modesto": 100, "padrao": 50, "potente": 25}[hw["classe"]]
+    ex.arquivo("/etc/systemd/zram-generator.conf",
+               f"# Gerado por vorticis-recursos\n[zram0]\nzram-size = ram * {fracao} / 100\n"
+               "compression-algorithm = zstd\nswap-priority = 100\n")
+
+    # 2. Parâmetros do kernel ajustados para zram e responsividade da área de trabalho.
+    ex.arquivo("/etc/sysctl.d/90-vorticis.conf",
+               "# Gerado por vorticis-recursos\n"
+               "vm.swappiness = 180\n"            # zram é rápida: preferir comprimir a descartar cache
+               "vm.watermark_boost_factor = 0\n"
+               "vm.watermark_scale_factor = 125\n"
+               "vm.page-cluster = 0\n"
+               f"vm.vfs_cache_pressure = {120 if hw['classe'] == 'modesto' else 80}\n"
+               "kernel.sched_autogroup_enabled = 1\n"
+               "fs.inotify.max_user_watches = 524288\n"
+               "vm.max_map_count = 1048576\n")    # exigido por vários jogos (Proton)
+
+    # 3. OOM inteligente: mata o processo culpado antes de o sistema travar.
+    ex.arquivo("/etc/systemd/oomd.conf.d/vorticis.conf",
+               "[OOM]\nSwapUsedLimit=90%\nDefaultMemoryPressureLimit=60%\nDefaultMemoryPressureDurationSec=20s\n")
+    ex.arquivo("/etc/systemd/system/user@.service.d/vorticis-oomd.conf",
+               "[Service]\nManagedOOMMemoryPressure=kill\nManagedOOMMemoryPressureLimit=60%\n")
+
+    # 4. Armazenamento: TRIM semanal em SSD; agendador adequado.
+    if hw["ssd"]:
+        ex.cmd(["systemctl", "enable", "--now", "fstrim.timer"])
+    ex.arquivo("/etc/udev/rules.d/60-vorticis-io.rules",
+               '# Gerado por vorticis-recursos\n'
+               'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/scheduler}="none"\n'
+               'ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="mq-deadline"\n'
+               'ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="bfq"\n')
+
+    # 5. Energia
+    ex.cmd(["systemctl", "enable", "--now", "systemd-oomd.service"])
+    ex.cmd(["systemctl", "enable", "--now", "power-profiles-daemon.service"])
+    ex.cmd(["sysctl", "--system"])
+    print("\nPronto. O zram passa a valer no próximo boot (ou: systemctl restart systemd-zram-setup@zram0).")
+
+
+def tamanho(caminho):
+    total = 0
+    for raiz, _dirs, arquivos in os.walk(caminho):
+        for f in arquivos:
+            try:
+                total += os.lstat(os.path.join(raiz, f)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def cmd_limpar(a):
+    ex = Exec(a.simular)
+    casa = Path.home()
+    alvos = [casa / ".cache/thumbnails", casa / ".cache/vorticis"]
+    liberado = 0
+    for alvo in alvos:
+        if alvo.exists():
+            t = tamanho(alvo)
+            liberado += t
+            print(f"{'[simulação] ' if a.simular else '→ '}apagar {alvo} ({gb(t)})")
+            if not a.simular:
+                shutil.rmtree(alvo, ignore_errors=True)
+    lixeira = casa / ".local/share/Trash/files"
+    limite = time.time() - 30 * 86400
+    if lixeira.exists():
+        for item in lixeira.iterdir():
+            try:
+                if item.lstat().st_mtime < limite:
+                    t = tamanho(item) if item.is_dir() else item.lstat().st_size
+                    liberado += t
+                    print(f"{'[simulação] ' if a.simular else '→ '}esvaziar da lixeira: {item.name} ({gb(t)})")
+                    if not a.simular:
+                        shutil.rmtree(item) if item.is_dir() else item.unlink()
+                        info = casa / ".local/share/Trash/info" / (item.name + ".trashinfo")
+                        info.unlink(missing_ok=True)
+            except OSError:
+                pass
+    if os.geteuid() == 0 or a.simular:
+        ex.cmd(["apt-get", "clean"])
+        ex.cmd(["apt-get", "autoremove", "-y", "--purge"])
+        ex.cmd(["journalctl", "--vacuum-time=14d", "--vacuum-size=300M"])
+        if shutil.which("flatpak"):
+            ex.cmd(["flatpak", "uninstall", "--unused", "-y"])
+    else:
+        print("(Rode com sudo para limpar também pacotes, logs do sistema e runtimes Flatpak órfãos.)")
+    print(f"\nLiberado (arquivos do usuário): {gb(liberado)}")
+
+
+def cmd_energia(a):
+    mapa = {"economia": "power-saver", "equilibrado": "balanced", "desempenho": "performance"}
+    if not shutil.which("powerprofilesctl"):
+        sys.exit("power-profiles-daemon não instalado.")
+    subprocess.run(["powerprofilesctl", "set", mapa[a.perfil]], check=True)
+    print(f"Perfil de energia: {a.perfil}")
+
+
+def cmd_painel(_a):
+    try:
+        while True:
+            print("\033[2J\033[H", end="")
+            print("Vorticis · Monitor de recursos  (Ctrl+C para sair)\n")
+            with open("/proc/loadavg") as f:
+                carga = f.read().split()[:3]
+            print(f"Carga da CPU (1/5/15 min): {' / '.join(carga)}  ·  {os.cpu_count()} núcleos\n")
+            cmd_status(None)
+            time.sleep(2)
+    except KeyboardInterrupt:
+        print()
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-recursos", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("status").set_defaults(f=cmd_status)
+    for nome, f in (("aplicar", cmd_aplicar), ("limpar", cmd_limpar)):
+        p = sub.add_parser(nome); p.add_argument("--simular", action="store_true"); p.set_defaults(f=f)
+    p = sub.add_parser("energia"); p.add_argument("perfil", choices=["economia", "equilibrado", "desempenho"]); p.set_defaults(f=cmd_energia)
+    sub.add_parser("painel").set_defaults(f=cmd_painel)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

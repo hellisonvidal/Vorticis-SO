@@ -1,0 +1,25 @@
+{
+  "id": "mare",
+  "nome": "Maré",
+  "descricao": "Tema padrão: tons de azul e água que ondula ao passar do mouse.",
+  "animado": true,
+  "fundoEstatico": "radial-gradient(ellipse at 30% 0%, #4fb3ff 0%, #0b6fb8 35%, #03214a 100%)",
+  "cores": {
+    "destaque": "#38b6ff",
+    "destaqueForte": "#0a84ff",
+    "texto": "#eaf6ff",
+    "textoSuave": "#a9cbe6",
+    "painel": "rgba(6, 30, 64, 0.62)",
+    "painelBorda": "rgba(140, 210, 255, 0.22)",
+    "item": "rgba(255, 255, 255, 0.07)",
+    "itemHover": "rgba(120, 200, 255, 0.20)"
+  },
+  "agua": {
+    "corFundo": "#021a3d",
+    "corMeio": "#0d78c4",
+    "corBrilho": "#c6ecff",
+    "causticas": 0.35,
+    "amortecimento": 0.985,
+    "gotasAmbiente": true
+  }
+}

@@ -1,0 +1,7 @@
+nftables
+apparmor
+apparmor-profiles
+apparmor-profiles-extra
+apparmor-utils
+systemd-resolved
+unattended-upgrades

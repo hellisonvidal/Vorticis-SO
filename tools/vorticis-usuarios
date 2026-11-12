@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""vorticis-usuarios — contas com níveis de acesso.
+
+Níveis:
+  admin      Administrador: controle total (com senha)
+  padrao     Padrão: usa e instala apps só para si, troca Wi-Fi, sem mexer no sistema
+  convidado  Convidado: sem senha, pasta pessoal apagada ao sair, sem acesso à rede local
+  infantil   Infantil: só apps permitidos, horário limitado, DNS com filtro familiar
+
+Uso:
+  vorticis-usuarios configurar [--simular]          instala grupos, regras polkit e PAM (uma vez)
+  vorticis-usuarios criar LOGIN --nivel NIVEL [--nome "Nome Completo"] [--horario "Wk0800-2000"] [--simular]
+  vorticis-usuarios nivel LOGIN NIVEL [--simular]
+  vorticis-usuarios remover LOGIN [--manter-arquivos] [--simular]
+  vorticis-usuarios listar
+"""
+import argparse
+import getpass
+import grp
+import os
+import pwd
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+NIVEIS = {
+    "admin":     {"rotulo": "Administrador", "grupos": ["sudo", "vorticis-admin", "netdev", "lpadmin", "audio", "video", "plugdev", "kvm"]},
+    "padrao":    {"rotulo": "Padrão",        "grupos": ["vorticis-padrao", "netdev", "audio", "video", "plugdev"]},
+    "convidado": {"rotulo": "Convidado",     "grupos": ["vorticis-convidado", "audio", "video"]},
+    "infantil":  {"rotulo": "Infantil",      "grupos": ["vorticis-infantil", "audio", "video"]},
+}
+GRUPOS_VORTICIS = ["vorticis-admin", "vorticis-padrao", "vorticis-convidado", "vorticis-infantil"]
+TODOS_GRUPOS_GERENCIADOS = sorted({g for n in NIVEIS.values() for g in n["grupos"]})
+
+POLKIT = r"""// Gerado por vorticis-usuarios — níveis de acesso do Vorticis SO
+polkit.addRule(function (action, subject) {
+  // Administradores: qualquer ação administrativa, pedindo a própria senha.
+  if (subject.isInGroup("vorticis-admin")) {
+    return polkit.Result.AUTH_SELF_KEEP;
+  }
+
+  // Convidado e Infantil: nada administrativo, nem com senha de admin na tela.
+  if (subject.isInGroup("vorticis-convidado") || subject.isInGroup("vorticis-infantil")) {
+    if (action.id.indexOf("org.freedesktop.login1.power-off") === 0 ||
+        action.id.indexOf("org.freedesktop.login1.reboot") === 0 ||
+        action.id.indexOf("org.freedesktop.login1.suspend") === 0) {
+      return polkit.Result.YES;
+    }
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 ||
+        action.id.indexOf("org.freedesktop.Flatpak.") === 0 ||
+        action.id.indexOf("org.freedesktop.packagekit.") === 0 ||
+        action.id.indexOf("org.freedesktop.udisks2.") === 0) {
+      return polkit.Result.NO;
+    }
+  }
+
+  // Padrão: Wi-Fi, Flatpak por usuário, pen-drives e energia sem senha.
+  if (subject.isInGroup("vorticis-padrao") && subject.local && subject.active) {
+    if (action.id === "org.freedesktop.NetworkManager.network-control" ||
+        action.id === "org.freedesktop.NetworkManager.wifi.share.protected" ||
+        action.id === "org.freedesktop.NetworkManager.settings.modify.own" ||
+        action.id === "org.freedesktop.udisks2.filesystem-mount" ||
+        action.id === "org.freedesktop.login1.power-off" ||
+        action.id === "org.freedesktop.login1.reboot" ||
+        action.id === "org.freedesktop.login1.suspend") {
+      return polkit.Result.YES;
+    }
+    // Instalação de pacotes do sistema exige senha de administrador.
+    if (action.id.indexOf("org.freedesktop.packagekit.") === 0) {
+      return polkit.Result.AUTH_ADMIN;
+    }
+  }
+});
+"""
+
+LIMPAR_CONVIDADO = """#!/bin/sh
+# Gerado por vorticis-usuarios: apaga a pasta do convidado ao encerrar a sessão.
+[ "$PAM_TYPE" = "close_session" ] || exit 0
+id -nG "$PAM_USER" 2>/dev/null | grep -qw vorticis-convidado || exit 0
+casa=$(getent passwd "$PAM_USER" | cut -d: -f6)
+case "$casa" in /home/*) ;; *) exit 0 ;; esac
+pkill -KILL -u "$PAM_USER" 2>/dev/null
+find "$casa" -mindepth 1 -delete
+cp -a /etc/skel/. "$casa"/ && chown -R "$PAM_USER": "$casa"
+"""
+
+ARQ_POLKIT = Path("/etc/polkit-1/rules.d/50-vorticis.rules")
+ARQ_LIMPEZA = Path("/usr/lib/vorticis/limpar-convidado")
+ARQ_PAM = Path("/etc/pam.d/common-session")
+ARQ_TEMPO = Path("/etc/security/time.conf")
+ARQ_INFANTIL = Path("/etc/vorticis/infantil-uids")
+ARQ_PERFIL = Path("/etc/vorticis/usuarios")
+
+
+class Exec:
+    def __init__(self, simular):
+        self.simular = simular
+
+    def cmd(self, c, entrada=None, checar=True):
+        exibir = " ".join(c)
+        print(("[simulação] " if self.simular else "→ ") + exibir)
+        if not self.simular:
+            subprocess.run(c, input=entrada, text=True, check=checar)
+
+    def escrever(self, caminho, conteudo, modo=0o644):
+        print(("[simulação] " if self.simular else "→ ") + f"escrever {caminho}")
+        if self.simular:
+            return
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        caminho.write_text(conteudo)
+        caminho.chmod(modo)
+
+    def acrescentar_linha(self, caminho, linha, marcador):
+        atual = caminho.read_text() if caminho.exists() else ""
+        if marcador in atual:
+            return
+        self.escrever(caminho, atual.rstrip("\n") + "\n" + linha + "\n", 0o644)
+
+
+def exigir_root(simular):
+    if os.geteuid() != 0 and not simular:
+        sys.exit("É preciso ser administrador (sudo) — ou use --simular.")
+
+
+def validar_login(login):
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", login):
+        sys.exit("Login inválido: use letras minúsculas, números, _ ou - (até 32 caracteres).")
+
+
+def grupo_existe(g):
+    try:
+        grp.getgrnam(g)
+        return True
+    except KeyError:
+        return False
+
+
+def nivel_de(login):
+    grupos = {g.gr_name for g in grp.getgrall() if login in g.gr_mem}
+    try:
+        grupos.add(grp.getgrgid(pwd.getpwnam(login).pw_gid).gr_name)
+    except KeyError:
+        pass
+    for n in ("admin", "infantil", "convidado", "padrao"):
+        if f"vorticis-{n}" in grupos:
+            return n
+    return "admin" if "sudo" in grupos else "padrao"
+
+
+def registrar_perfil(ex, login, nivel):
+    """Guarda nível → perfil da barra de tarefas (lido pelo shell)."""
+    perfil = {"infantil": "infantil", "convidado": "basico"}.get(nivel, "basico")
+    linhas = []
+    if ARQ_PERFIL.exists():
+        linhas = [l for l in ARQ_PERFIL.read_text().splitlines() if not l.startswith(login + ":")]
+    linhas.append(f"{login}:{nivel}:{perfil}")
+    ex.escrever(ARQ_PERFIL, "\n".join(linhas) + "\n")
+
+
+def atualizar_infantis(ex):
+    uids = []
+    for p in pwd.getpwall():
+        if nivel_de(p.pw_name) == "infantil":
+            uids.append(str(p.pw_uid))
+    ex.escrever(ARQ_INFANTIL, "\n".join(uids) + ("\n" if uids else ""))
+    ex.cmd(["systemctl", "reload-or-restart", "vorticis-rede.service"], checar=False)
+
+
+def cmd_configurar(a):
+    exigir_root(a.simular)
+    ex = Exec(a.simular)
+    for g in GRUPOS_VORTICIS:
+        if not grupo_existe(g):
+            ex.cmd(["groupadd", "--system", g])
+    ex.escrever(ARQ_POLKIT, POLKIT)
+    ex.escrever(ARQ_LIMPEZA, LIMPAR_CONVIDADO, 0o755)
+    ex.acrescentar_linha(ARQ_PAM, f"session optional pam_exec.so {ARQ_LIMPEZA}", str(ARQ_LIMPEZA))
+    ex.acrescentar_linha(Path("/etc/pam.d/common-account"),
+                         "account required pam_time.so", "pam_time.so")
+    print("Configuração de níveis de acesso concluída.")
+
+
+def cmd_criar(a):
+    exigir_root(a.simular)
+    validar_login(a.login)
+    ex = Exec(a.simular)
+    try:
+        pwd.getpwnam(a.login)
+        sys.exit(f"O usuário '{a.login}' já existe. Para mudar o nível: vorticis-usuarios nivel {a.login} <nivel>")
+    except KeyError:
+        pass
+    grupos = [g for g in NIVEIS[a.nivel]["grupos"] if grupo_existe(g) or a.simular]
+    ex.cmd(["useradd", "--create-home", "--shell", "/bin/bash", "--comment", a.nome or a.login,
+            "--groups", ",".join(grupos), a.login])
+
+    if a.nivel == "convidado":
+        ex.cmd(["passwd", "--delete", a.login])
+    elif not a.simular:
+        senha = getpass.getpass(f"Senha para {a.login}: ")
+        if senha != getpass.getpass("Repita a senha: "):
+            ex.cmd(["userdel", "--remove", a.login])
+            sys.exit("As senhas não conferem; usuário não criado.")
+        if len(senha) < 8 and a.nivel == "admin":
+            ex.cmd(["userdel", "--remove", a.login])
+            sys.exit("Administradores precisam de senha com pelo menos 8 caracteres.")
+        ex.cmd(["chpasswd"], entrada=f"{a.login}:{senha}\n")
+    else:
+        print("[simulação] (pediria a senha e aplicaria com chpasswd)")
+
+    if a.nivel == "infantil":
+        horario = a.horario or "Wk0800-2000|SaSu0900-2100"
+        ex.acrescentar_linha(ARQ_TEMPO, f"*;*;{a.login};{horario}", f";{a.login};")
+        if a.simular:
+            print("[simulação] adicionar UID à lista de filtro DNS familiar")
+        else:
+            atualizar_infantis(ex)
+    registrar_perfil(ex, a.login, a.nivel)
+    print(f"Usuário '{a.login}' criado com nível {NIVEIS[a.nivel]['rotulo']}.")
+
+
+def cmd_nivel(a):
+    exigir_root(a.simular)
+    ex = Exec(a.simular)
+    try:
+        pwd.getpwnam(a.login)
+    except KeyError:
+        sys.exit(f"Usuário '{a.login}' não existe.")
+    if a.nivel != "admin" and nivel_de(a.login) == "admin":
+        admins = [p.pw_name for p in pwd.getpwall() if p.pw_uid >= 1000 and nivel_de(p.pw_name) == "admin"]
+        if admins == [a.login]:
+            sys.exit("Este é o único administrador: crie outro antes de rebaixá-lo.")
+    for g in TODOS_GRUPOS_GERENCIADOS:
+        if g not in NIVEIS[a.nivel]["grupos"] and grupo_existe(g):
+            ex.cmd(["gpasswd", "--delete", a.login, g], checar=False)
+    grupos = [g for g in NIVEIS[a.nivel]["grupos"] if grupo_existe(g) or a.simular]
+    ex.cmd(["usermod", "--append", "--groups", ",".join(grupos), a.login])
+    if not a.simular:
+        atualizar_infantis(ex)
+    registrar_perfil(ex, a.login, a.nivel)
+    print(f"'{a.login}' agora é {NIVEIS[a.nivel]['rotulo']}. Vale a partir do próximo login.")
+
+
+def cmd_remover(a):
+    exigir_root(a.simular)
+    ex = Exec(a.simular)
+    if a.login == os.environ.get("SUDO_USER"):
+        sys.exit("Você não pode remover a própria conta enquanto está conectado.")
+    ex.cmd(["userdel"] + ([] if a.manter_arquivos else ["--remove"]) + [a.login])
+    if not a.simular:
+        atualizar_infantis(ex)
+
+
+def cmd_listar(_a):
+    print(f"{'LOGIN':<16} {'NOME':<24} {'NÍVEL':<14}")
+    for p in sorted(pwd.getpwall(), key=lambda p: p.pw_uid):
+        if 1000 <= p.pw_uid < 60000 and not p.pw_shell.endswith(("nologin", "false")):
+            nome = p.pw_gecos.split(",")[0] or "-"
+            print(f"{p.pw_name:<16} {nome:<24} {NIVEIS[nivel_de(p.pw_name)]['rotulo']:<14}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-usuarios", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("configurar"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_configurar)
+    p = sub.add_parser("criar"); p.add_argument("login"); p.add_argument("--nivel", choices=NIVEIS, default="padrao")
+    p.add_argument("--nome"); p.add_argument("--horario", help="formato pam_time, ex.: Wk0800-2000"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_criar)
+    p = sub.add_parser("nivel"); p.add_argument("login"); p.add_argument("nivel", choices=NIVEIS); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_nivel)
+    p = sub.add_parser("remover"); p.add_argument("login"); p.add_argument("--manter-arquivos", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_remover)
+    sub.add_parser("listar").set_defaults(f=cmd_listar)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

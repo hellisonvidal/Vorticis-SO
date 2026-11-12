@@ -1,0 +1,129 @@
+#!/bin/sh
+# vorticis-instalar-daqui — instala o Vorticis SO a partir de um Linux em uso.
+#
+# Modos:
+#   --boot-iso   (padrão) copia a ISO para o disco e cria uma entrada no GRUB
+#                que inicia o Vorticis direto da ISO. Nada é particionado agora:
+#                no Vorticis live, o instalador gráfico faz a instalação definitiva
+#                (ao lado do sistema atual ou substituindo-o).
+#   --pendrive /dev/sdX   grava a ISO num pen-drive (APAGA o pen-drive).
+#
+# Opções:
+#   --iso ARQUIVO     usa uma ISO local em vez de baixar
+#   --url URL         endereço de download da ISO
+#   --simular         mostra o que seria feito
+set -eu
+
+VERSAO="0.1"
+URL="https://github.com/hellisonvidal/Vorticis-SO/releases/download/v${VERSAO}/vorticis-${VERSAO}-amd64.iso"
+DESTINO_DIR="/vorticis"
+MODO="boot-iso"
+ISO=""
+PENDRIVE=""
+SIMULAR=0
+
+msg()  { printf '\033[1;34m»\033[0m %s\n' "$*"; }
+erro() { printf '\033[1;31m✘\033[0m %s\n' "$*" >&2; exit 1; }
+run()  { if [ "$SIMULAR" -eq 1 ]; then echo "[simulação] $*"; else "$@"; fi; }
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --boot-iso) MODO="boot-iso" ;;
+        --pendrive) MODO="pendrive"; PENDRIVE="${2:-}"; shift ;;
+        --iso) ISO="${2:-}"; shift ;;
+        --url) URL="${2:-}"; shift ;;
+        --simular) SIMULAR=1 ;;
+        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+        *) erro "Opção desconhecida: $1" ;;
+    esac
+    shift
+done
+
+[ "$SIMULAR" -eq 1 ] || [ "$(id -u)" -eq 0 ] || erro "Execute como root: sudo $0 $*"
+
+obter_iso() {
+    if [ -n "$ISO" ]; then
+        [ -f "$ISO" ] || erro "ISO não encontrada: $ISO"
+        return
+    fi
+    ISO="${TMPDIR:-/var/tmp}/vorticis-${VERSAO}-amd64.iso"
+    msg "Baixando $URL"
+    run curl -fL --retry 3 -C - -o "$ISO" "$URL"
+    msg "Verificando integridade (SHA-256)"
+    if [ "$SIMULAR" -eq 0 ]; then
+        curl -fsSL "$URL.sha256" -o "$ISO.sha256" || erro "Não foi possível baixar o checksum."
+        esperado=$(cut -d' ' -f1 "$ISO.sha256")
+        obtido=$(sha256sum "$ISO" | cut -d' ' -f1)
+        [ "$esperado" = "$obtido" ] || erro "Checksum não confere: download corrompido ou adulterado."
+    fi
+}
+
+modo_pendrive() {
+    [ -b "$PENDRIVE" ] || [ "$SIMULAR" -eq 1 ] || erro "Dispositivo inválido: $PENDRIVE"
+    raiz=$(findmnt -no SOURCE / | sed 's/[0-9]*$//; s/p$//')
+    [ "$PENDRIVE" != "$raiz" ] || erro "$PENDRIVE é o disco do sistema atual! Abortando."
+    if [ "$SIMULAR" -eq 0 ]; then
+        [ "$(lsblk -dno RM "$PENDRIVE")" = "1" ] || [ "$(lsblk -dno TRAN "$PENDRIVE")" = "usb" ] \
+            || erro "$PENDRIVE não parece ser removível/USB. Abortando por segurança."
+        lsblk -o NAME,SIZE,MODEL,MOUNTPOINTS "$PENDRIVE"
+        printf 'TODOS os dados de %s serão apagados. Digite APAGAR para continuar: ' "$PENDRIVE"
+        read -r resp
+        [ "$resp" = "APAGAR" ] || erro "Cancelado."
+        for p in $(lsblk -lno PATH "$PENDRIVE" | tail -n +2); do umount "$p" 2>/dev/null || true; done
+    fi
+    obter_iso
+    msg "Gravando $ISO em $PENDRIVE"
+    run dd if="$ISO" of="$PENDRIVE" bs=4M status=progress oflag=sync conv=fsync
+    msg "Pen-drive pronto. Reinicie e escolha o pen-drive no menu de boot (F12/F11/Esc)."
+}
+
+modo_boot_iso() {
+    if ! command -v grub-mkconfig >/dev/null 2>&1 && ! command -v grub2-mkconfig >/dev/null 2>&1; then
+        [ "$SIMULAR" -eq 1 ] && msg "(simulação) GRUB não encontrado nesta máquina" \
+            || erro "GRUB não encontrado. Use o modo --pendrive."
+    fi
+    obter_iso
+    livre=$(df --output=avail -k / | tail -1)
+    [ "$livre" -gt 6000000 ] || [ "$SIMULAR" -eq 1 ] || erro "São necessários ~6 GB livres em /."
+    msg "Copiando a ISO para $DESTINO_DIR"
+    run mkdir -p "$DESTINO_DIR"
+    run cp "$ISO" "$DESTINO_DIR/vorticis.iso"
+
+    msg "Criando entrada 'Vorticis SO (instalar)' no GRUB"
+    ENTRADA='#!/bin/sh
+exec tail -n +3 $0
+menuentry "Vorticis SO (live / instalar)" --class vorticis {
+    insmod part_gpt
+    insmod part_msdos
+    insmod ext2
+    insmod btrfs
+    insmod loopback
+    insmod iso9660
+    search --no-floppy --set=root --file /vorticis/vorticis.iso
+    loopback loop /vorticis/vorticis.iso
+    linux (loop)/live/vmlinuz boot=live findiso=/vorticis/vorticis.iso components quiet splash locales=pt_BR.UTF-8 keyboard-layouts=br
+    initrd (loop)/live/initrd.img
+}'
+    if [ "$SIMULAR" -eq 1 ]; then
+        echo "[simulação] escrever /etc/grub.d/42_vorticis:"; echo "$ENTRADA" | sed 's/^/    /'
+    else
+        echo "$ENTRADA" > /etc/grub.d/42_vorticis
+        chmod 755 /etc/grub.d/42_vorticis
+    fi
+    if command -v update-grub >/dev/null 2>&1; then run update-grub
+    elif command -v grub2-mkconfig >/dev/null 2>&1; then run grub2-mkconfig -o /boot/grub2/grub.cfg
+    else run grub-mkconfig -o /boot/grub/grub.cfg; fi
+    if command -v grub-reboot >/dev/null 2>&1; then run grub-reboot "Vorticis SO (live / instalar)"; fi
+
+    msg "Pronto! Reinicie o computador: o Vorticis iniciará uma vez em modo live."
+    msg "Lá, abra 'Instalar Vorticis' e escolha 'Instalar ao lado' ou 'Substituir'."
+    msg "Para desfazer: sudo rm -r $DESTINO_DIR /etc/grub.d/42_vorticis && sudo update-grub"
+    if [ -d /sys/firmware/efi ] && command -v mokutil >/dev/null 2>&1 && mokutil --sb-state 2>/dev/null | grep -q enabled; then
+        msg "Secure Boot ativo: o Vorticis usa shim assinado do Debian, deve iniciar normalmente."
+    fi
+}
+
+case "$MODO" in
+    pendrive) modo_pendrive ;;
+    boot-iso) modo_boot_iso ;;
+esac

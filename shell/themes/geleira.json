@@ -1,0 +1,17 @@
+{
+  "id": "geleira",
+  "nome": "Geleira",
+  "descricao": "Estático e claro. Custo zero de GPU — ideal para máquinas modestas.",
+  "animado": false,
+  "fundoEstatico": "linear-gradient(160deg, #e8f6ff 0%, #a7d8f5 45%, #4a9bd1 100%)",
+  "cores": {
+    "destaque": "#0a6fb8",
+    "destaqueForte": "#075a96",
+    "texto": "#06243d",
+    "textoSuave": "#3d607a",
+    "painel": "rgba(255, 255, 255, 0.70)",
+    "painelBorda": "rgba(10, 111, 184, 0.20)",
+    "item": "rgba(10, 60, 100, 0.06)",
+    "itemHover": "rgba(10, 111, 184, 0.14)"
+  }
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=Vorticis SO — firewall e filtro familiar
+Wants=network-pre.target
+Before=network-pre.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/vorticis/vorticis-rede carregar
+ExecReload=/usr/lib/vorticis/vorticis-rede carregar
+ExecStop=/usr/sbin/nft flush ruleset
+
+[Install]
+WantedBy=multi-user.target

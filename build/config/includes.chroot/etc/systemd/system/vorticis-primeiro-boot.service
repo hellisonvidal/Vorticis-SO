@@ -1,0 +1,17 @@
+[Unit]
+Description=Vorticis SO — ajustes automáticos no primeiro boot (recursos e drivers)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/vorticis/primeiro-boot-feito
+# Não roda na sessão live do pen-drive
+ConditionKernelCommandLine=!boot=live
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/vorticis-recursos aplicar
+ExecStart=-/usr/bin/vorticis-drivers instalar --auto
+ExecStart=/bin/sh -c 'mkdir -p /var/lib/vorticis && touch /var/lib/vorticis/primeiro-boot-feito'
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

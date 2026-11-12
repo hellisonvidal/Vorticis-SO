@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""vorticis-navegadores — instala e integra os principais navegadores ao Vorticis.
+
+Uso:
+  vorticis-navegadores listar
+  vorticis-navegadores instalar NAVEGADOR [--simular]
+  vorticis-navegadores padrao NAVEGADOR
+  vorticis-navegadores otimizar [--simular]   Wayland nativo + aceleração de vídeo por GPU
+  vorticis-navegadores abrir [URL]
+
+Navegadores: firefox, chromium, chrome, brave, edge, opera, vivaldi
+"""
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+NAVEGADORES = {
+    "firefox":  {"nome": "Mozilla Firefox", "apt": "firefox-esr", "desktop": "firefox-esr.desktop", "flatpak": "org.mozilla.firefox"},
+    "chromium": {"nome": "Chromium",        "apt": "chromium",    "desktop": "chromium.desktop",    "flatpak": "org.chromium.Chromium"},
+    "chrome":   {"nome": "Google Chrome",   "flatpak": "com.google.Chrome"},
+    "brave":    {"nome": "Brave",           "flatpak": "com.brave.Browser"},
+    "edge":     {"nome": "Microsoft Edge",  "flatpak": "com.microsoft.Edge"},
+    "opera":    {"nome": "Opera",           "flatpak": "com.opera.Opera"},
+    "vivaldi":  {"nome": "Vivaldi",         "flatpak": "com.vivaldi.Vivaldi"},
+}
+
+FLAGS_CHROMIUM = (
+    "--ozone-platform-hint=auto\n"
+    "--enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoEncoder,WaylandWindowDecorations\n"
+    "--enable-gpu-rasterization\n"
+)
+# Arquivos de flags lidos por cada navegador baseado em Chromium.
+ARQ_FLAGS = {
+    "chromium": "chromium-flags.conf", "chrome": "chrome-flags.conf", "brave": "brave-flags.conf",
+    "edge": "microsoft-edge-stable-flags.conf", "vivaldi": "vivaldi-stable-flags.conf", "opera": "opera-flags.conf",
+}
+PREFS_FIREFOX = """// Gerado por vorticis-navegadores
+pref("widget.use-xdg-desktop-portal.file-picker", 1);
+pref("media.ffmpeg.vaapi.enabled", true);
+pref("gfx.webrender.all", true);
+pref("dom.security.https_only_mode", true);
+pref("privacy.globalprivacycontrol.enabled", true);
+"""
+
+
+def flatpak_instalado(app):
+    return shutil.which("flatpak") and subprocess.run(["flatpak", "info", app], capture_output=True).returncode == 0
+
+
+def instalado(chave):
+    n = NAVEGADORES[chave]
+    if "apt" in n and Path(f"/usr/share/applications/{n['desktop']}").exists():
+        return "sistema"
+    if flatpak_instalado(n["flatpak"]):
+        return "flatpak"
+    return None
+
+
+def desktop_de(chave):
+    n = NAVEGADORES[chave]
+    return n["desktop"] if instalado(chave) == "sistema" else n["flatpak"] + ".desktop"
+
+
+def rodar(cmd, simular, root=False):
+    if root and shutil.which("pkexec"):
+        cmd = ["pkexec"] + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd))
+    return 0 if simular else subprocess.run(cmd).returncode
+
+
+def cmd_listar(_a):
+    padrao = ""
+    if shutil.which("xdg-settings"):
+        padrao = subprocess.run(["xdg-settings", "get", "default-web-browser"], capture_output=True, text=True).stdout.strip()
+    for chave, n in NAVEGADORES.items():
+        onde = instalado(chave)
+        marca = "★" if padrao and padrao in (n.get("desktop"), n["flatpak"] + ".desktop") else " "
+        print(f" {marca} {chave:<9} {n['nome']:<18} {'instalado (' + onde + ')' if onde else 'disponível'}")
+
+
+def cmd_instalar(a):
+    n = NAVEGADORES[a.navegador]
+    if instalado(a.navegador):
+        print(f"{n['nome']} já está instalado.")
+        return
+    if "apt" in n:
+        codigo = rodar(["apt-get", "install", "-y", n["apt"]], a.simular, root=True)
+    else:
+        codigo = rodar(["flatpak", "install", "-y", "--noninteractive", "flathub", n["flatpak"]], a.simular)
+    if codigo == 0:
+        print(f"{n['nome']} instalado. Para torná-lo padrão: vorticis-navegadores padrao {a.navegador}")
+
+
+def cmd_padrao(a):
+    if not instalado(a.navegador):
+        sys.exit(f"Instale primeiro: vorticis-navegadores instalar {a.navegador}")
+    d = desktop_de(a.navegador)
+    subprocess.run(["xdg-settings", "set", "default-web-browser", d], check=True)
+    for mime in ("x-scheme-handler/http", "x-scheme-handler/https", "text/html", "application/xhtml+xml"):
+        subprocess.run(["xdg-mime", "default", d, mime], check=False)
+    print(f"Navegador padrão: {NAVEGADORES[a.navegador]['nome']}")
+
+
+def cmd_otimizar(a):
+    conf = Path.home() / ".config"
+    for chave, arq in ARQ_FLAGS.items():
+        destino = conf / arq
+        print(("[simulação] " if a.simular else "→ ") + f"escrever {destino}")
+        if not a.simular:
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_text(FLAGS_CHROMIUM)
+    # Navegadores Flatpak: permite Wayland e GPU.
+    if shutil.which("flatpak"):
+        for chave, n in NAVEGADORES.items():
+            if n["flatpak"] and (a.simular or flatpak_instalado(n["flatpak"])):
+                rodar(["flatpak", "override", "--user", "--socket=wayland", "--device=dri", n["flatpak"]], a.simular)
+    destino = Path("/etc/firefox-esr/vorticis.js")
+    print(("[simulação] " if a.simular else "→ ") + f"escrever {destino} (preferências do Firefox, requer admin)")
+    if not a.simular and destino.parent.exists():
+        try:
+            destino.write_text(PREFS_FIREFOX)
+        except PermissionError:
+            print("  (sem permissão — rode com sudo para aplicar ao Firefox do sistema)")
+
+
+def cmd_abrir(a):
+    subprocess.Popen(["xdg-open", a.url or "about:blank"])
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-navegadores", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("listar").set_defaults(f=cmd_listar)
+    p = sub.add_parser("instalar"); p.add_argument("navegador", choices=NAVEGADORES); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_instalar)
+    p = sub.add_parser("padrao"); p.add_argument("navegador", choices=NAVEGADORES); p.set_defaults(f=cmd_padrao)
+    p = sub.add_parser("otimizar"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_otimizar)
+    p = sub.add_parser("abrir"); p.add_argument("url", nargs="?"); p.add_argument("--infantil", action="store_true"); p.set_defaults(f=cmd_abrir)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

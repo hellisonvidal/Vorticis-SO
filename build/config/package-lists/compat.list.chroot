@@ -1,0 +1,11 @@
+# Camadas de compatibilidade (Windows, jogos, contêineres, Flatpak)
+flatpak
+distrobox
+podman
+wine
+wine64
+winetricks
+fonts-wine
+gamemode
+mangohud
+lutris

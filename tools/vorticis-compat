@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""vorticis-compat — instala qualquer programa pela camada de compatibilidade certa.
+
+Uso:
+  vorticis-compat instalar ARQUIVO [--nome NOME] [--simular]
+  vorticis-compat detectar ARQUIVO
+  vorticis-compat preparar {windows,android,macos,jogos,rpm,todos} [--simular]
+  vorticis-compat status
+
+Camadas: Linux nativo (apt/flatpak/AppImage), Windows (Wine/Proton), Android
+(Waydroid), macOS (Darling, limitado), RPM (Distrobox Fedora).
+"""
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+DADOS = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
+PREFIXOS_WINE = DADOS / "vorticis/wine"
+ATALHOS = DADOS / "applications"
+APPIMAGES = HOME / "Aplicativos"
+
+ASSINATURAS = [
+    (b"MZ", "windows"),
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "windows"),  # .msi (OLE2)
+    (b"!<arch>\ndebian", "deb"),
+    (b"\xed\xab\xee\xdb", "rpm"),
+    (b"\x7fELF", "elf"),
+    (b"koly", "macos"),
+]
+
+EXTENSOES = {
+    ".exe": "windows", ".msi": "windows", ".bat": "windows",
+    ".apk": "android", ".xapk": "android", ".apks": "android",
+    ".deb": "deb", ".rpm": "rpm",
+    ".appimage": "appimage",
+    ".flatpakref": "flatpak", ".flatpak": "flatpak",
+    ".dmg": "macos", ".pkg": "macos",
+    ".sh": "script", ".run": "script",
+}
+
+PACOTES_CAMADA = {
+    "windows": ["wine", "wine64", "wine32:i386", "winetricks", "fonts-wine"],
+    "android": ["waydroid"],
+    "macos":   ["darling"],
+    "jogos":   ["steam-installer", "gamemode", "mangohud", "lutris"],
+    "rpm":     ["distrobox", "podman"],
+}
+FLATPAKS_CAMADA = {
+    "windows": ["com.usebottles.bottles"],
+    "jogos":   ["com.heroicgameslauncher.hgl"],
+}
+
+
+class Executor:
+    def __init__(self, simular):
+        self.simular = simular
+
+    def rodar(self, cmd, root=False, checar=True):
+        if root and os.geteuid() != 0:
+            cmd = ["pkexec"] + cmd if shutil.which("pkexec") else ["sudo"] + cmd
+        print(("[simulação] " if self.simular else "→ ") + " ".join(map(str, cmd)))
+        if self.simular:
+            return 0
+        return subprocess.run(list(map(str, cmd)), check=checar).returncode
+
+    def escrever(self, caminho, conteudo, modo=0o644):
+        print(("[simulação] " if self.simular else "→ ") + f"escrever {caminho}")
+        if self.simular:
+            return
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        caminho.write_text(conteudo)
+        caminho.chmod(modo)
+
+
+def detectar(arquivo: Path) -> str:
+    ext = arquivo.suffix.lower()
+    try:
+        with open(arquivo, "rb") as f:
+            cabecalho = f.read(16)
+            f.seek(0, os.SEEK_END)
+            if f.tell() >= 512:
+                f.seek(-512, os.SEEK_END)
+                rodape = f.read(4)
+            else:
+                rodape = b""
+    except OSError:
+        cabecalho = rodape = b""
+    if ext in (".apk", ".xapk", ".apks") and cabecalho.startswith(b"PK"):
+        return "android"
+    if rodape == b"koly":
+        return "macos"
+    if ext == ".appimage" or (cabecalho.startswith(b"\x7fELF") and cabecalho[8:10] == b"AI"):
+        return "appimage"
+    for magia, tipo in ASSINATURAS:
+        if cabecalho.startswith(magia) and tipo != "elf":
+            return tipo
+    return EXTENSOES.get(ext, "elf" if cabecalho.startswith(b"\x7fELF") else "desconhecido")
+
+
+def nome_seguro(texto: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", texto).strip("-").lower()
+    return base or "app"
+
+
+def criar_atalho(ex: Executor, ident, nome, exec_cmd, icone="application-x-executable", categoria="Utility"):
+    conteudo = (
+        "[Desktop Entry]\nType=Application\n"
+        f"Name={nome}\nExec={exec_cmd}\nIcon={icone}\nCategories={categoria};\n"
+        "X-Vorticis-Instalado=true\n"
+    )
+    ex.escrever(ATALHOS / f"vorticis-{ident}.desktop", conteudo)
+
+
+def instalar_windows(ex, arq, nome):
+    if not shutil.which("wine") and not ex.simular:
+        sys.exit("Wine não está instalado. Rode: vorticis-compat preparar windows")
+    ident = nome_seguro(nome)
+    prefixo = PREFIXOS_WINE / ident
+    env = f"WINEPREFIX={prefixo}"
+    print(f"Prefixo Wine isolado para '{nome}': {prefixo}")
+    if not ex.simular:
+        prefixo.mkdir(parents=True, exist_ok=True)
+        os.environ["WINEPREFIX"] = str(prefixo)
+    ex.rodar(["wineboot", "--init"], checar=False)
+    if arq.suffix.lower() == ".msi":
+        ex.rodar(["wine", "msiexec", "/i", arq])
+    else:
+        ex.rodar(["wine", arq])
+    # Procura o executável principal instalado para criar o atalho.
+    alvo = None
+    if not ex.simular:
+        candidatos = list((prefixo / "drive_c").glob("Program Files*/**/*.exe"))
+        candidatos = [c for c in candidatos if not re.search(r"unins|setup|update|crash", c.name, re.I)]
+        if candidatos:
+            alvo = max(candidatos, key=lambda c: c.stat().st_size)
+    exec_cmd = f'env {env} wine "{alvo}"' if alvo else f'env {env} wine explorer'
+    criar_atalho(ex, ident, nome, exec_cmd, "wine", "Wine")
+    print("Dica: jogos rodam melhor pela Steam (Proton) ou Heroic/Lutris (DXVK).")
+
+
+def instalar_android(ex, arq, nome):
+    if not shutil.which("waydroid") and not ex.simular:
+        sys.exit("Waydroid não está instalado. Rode: vorticis-compat preparar android")
+    ex.rodar(["waydroid", "session", "start"], checar=False)
+    ex.rodar(["waydroid", "app", "install", arq])
+    print(f"'{nome}' aparecerá no lançador como app Android.")
+
+
+def instalar_appimage(ex, arq, nome):
+    destino = APPIMAGES / arq.name
+    print(f"→ mover {arq} para {destino}")
+    if not ex.simular:
+        APPIMAGES.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(arq, destino)
+        destino.chmod(0o755)
+    criar_atalho(ex, nome_seguro(nome), nome, f'"{destino}"')
+
+
+def instalar(args):
+    arq = Path(args.arquivo).expanduser().resolve()
+    if not arq.exists():
+        sys.exit(f"Arquivo não encontrado: {arq}")
+    tipo = detectar(arq)
+    nome = args.nome or arq.stem
+    ex = Executor(args.simular)
+    print(f"Tipo detectado: {tipo}")
+    if tipo == "windows":
+        instalar_windows(ex, arq, nome)
+    elif tipo == "android":
+        instalar_android(ex, arq, nome)
+    elif tipo == "deb":
+        ex.rodar(["apt-get", "install", "-y", str(arq)], root=True)
+    elif tipo == "rpm":
+        ex.rodar(["distrobox", "create", "-Y", "-n", "vorticis-fedora", "-i", "registry.fedoraproject.org/fedora:latest"], checar=False)
+        ex.rodar(["distrobox", "enter", "vorticis-fedora", "--", "sudo", "dnf", "install", "-y", arq])
+        print("Use 'distrobox-export --app <nome>' dentro do contêiner para criar o atalho.")
+    elif tipo == "appimage":
+        instalar_appimage(ex, arq, nome)
+    elif tipo == "flatpak":
+        opc = "--from" if arq.suffix.lower() == ".flatpakref" else "--bundle"
+        ex.rodar(["flatpak", "install", "--user", "-y", opc, arq])
+    elif tipo == "macos":
+        print("⚠ Compatibilidade macOS é limitada (Darling): apenas programas de linha de comando.")
+        ex.rodar(["darling", "shell", "installer", "-pkg" if arq.suffix == ".pkg" else "-dmg", arq], checar=False)
+    elif tipo == "script":
+        print("⚠ Scripts executam código arbitrário. Confira o conteúdo antes:", arq)
+        ex.rodar(["sh", arq])
+    else:
+        sys.exit("Formato não reconhecido. Formatos aceitos: " + ", ".join(sorted(EXTENSOES)))
+
+
+def preparar(args):
+    ex = Executor(args.simular)
+    camadas = list(PACOTES_CAMADA) if args.camada == "todos" else [args.camada]
+    if "windows" in camadas or "jogos" in camadas:
+        ex.rodar(["dpkg", "--add-architecture", "i386"], root=True)
+    pacotes = sorted({p for c in camadas for p in PACOTES_CAMADA.get(c, [])})
+    ex.rodar(["apt-get", "update"], root=True)
+    ex.rodar(["apt-get", "install", "-y"] + pacotes, root=True)
+    for c in camadas:
+        for fp in FLATPAKS_CAMADA.get(c, []):
+            ex.rodar(["flatpak", "install", "-y", "--noninteractive", "flathub", fp], checar=False)
+    if "android" in camadas:
+        ex.rodar(["waydroid", "init", "-s", "GAPPS"], root=True, checar=False)
+        ex.rodar(["systemctl", "enable", "--now", "waydroid-container"], root=True, checar=False)
+    if "macos" in camadas:
+        print("Darling não está nos repositórios Debian: o pacote vem do repositório Vorticis (ver build/).")
+        print("Observação: o Vorticis não distribui imagens do macOS (licença da Apple).")
+
+
+def status(_args):
+    camadas = {
+        "Linux nativo (apt)": "apt-get", "Flatpak": "flatpak", "Windows (Wine)": "wine",
+        "Windows (Bottles)": "bottles", "Jogos (Steam/Proton)": "steam", "Android (Waydroid)": "waydroid",
+        "RPM (Distrobox)": "distrobox", "macOS (Darling)": "darling",
+    }
+    for nome, binario in camadas.items():
+        ok = shutil.which(binario) is not None
+        if not ok and binario == "bottles":
+            ok = subprocess.run(["flatpak", "info", "com.usebottles.bottles"], capture_output=True).returncode == 0 \
+                if shutil.which("flatpak") else False
+        print(f"  {'✔' if ok else '✘'} {nome}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-compat", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("instalar"); p.add_argument("arquivo"); p.add_argument("--nome"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=instalar)
+    p = sub.add_parser("detectar"); p.add_argument("arquivo"); p.set_defaults(f=lambda a: print(detectar(Path(a.arquivo))))
+    p = sub.add_parser("preparar"); p.add_argument("camada", choices=list(PACOTES_CAMADA) + ["todos"]); p.add_argument("--simular", action="store_true"); p.set_defaults(f=preparar)
+    p = sub.add_parser("status"); p.set_defaults(f=status)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()
