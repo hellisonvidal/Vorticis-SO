@@ -65,7 +65,9 @@ class Janela:
         cfg.set_allow_file_access_from_file_urls(True)
         cfg.set_allow_universal_access_from_file_urls(True)
         cfg.set_enable_media_stream(True)
-        cfg.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.ALWAYS)
+        sem_gpu = os.environ.get("VORTICIS_SEM_GPU") == "1" or not list(Path("/dev/dri").glob("renderD*"))
+        cfg.set_hardware_acceleration_policy(
+            WebKit.HardwareAccelerationPolicy.NEVER if sem_gpu else WebKit.HardwareAccelerationPolicy.ALWAYS)
         consulta = [f"abrir={quote(Path(a).resolve().as_uri() if '://' not in a else a, safe='')}" for a in arquivos]
         if secao:
             consulta.append(f"secao={quote(secao)}")

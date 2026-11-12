@@ -114,7 +114,7 @@
   const MODO = new URLSearchParams(location.search).get("modo") || "completo";
   document.body.classList.add("modo-" + MODO);
   const estado = { temas: {}, perfis: PERFIS_PADRAO, abertos: new Map(), z: 10 };
-  const fundo = MODO === "barra"
+  const fundo = MODO === "barra" || MODO === "menu"
     ? { definirTema() {}, definirImagem() {}, definirQualidade: (q) => (q === "auto" ? AguaVorticis.detectarQualidade() : q) }
     : new FundoVorticis($("#papel"));
 
@@ -280,6 +280,7 @@
   }
 
   function contextoApp(e, id, naBarra) {
+    if (CAMADA_PEDE) { e.preventDefault(); ponte("abrir-painel", { painel: "ctx-app", app: id, x: e.clientX }); return; }
     const l = fixados(), fixo = l.includes(id), aberto = estado.abertos.has(id);
     menuContexto(e, [
       ["▶ Abrir", () => abrirApp(id)],
@@ -374,8 +375,15 @@
   }
 
   /* ======================================================================= Painéis */
+  // Dentro do SO, menus e painéis abrem numa camada própria ("menu"), sobreposta à tela;
+  // a barra e o papel de parede só pedem a abertura ao vorticis-shell.
+  const CAMADA_PEDE = MODO === "barra" || MODO === "papel";
+  const algoAberto = () => !$("#menu").hidden || !$("#config").hidden || !$("#ctx").hidden;
+  function verificarCamadaVazia() {
+    if (MODO === "menu") setTimeout(() => { if (!algoAberto()) ponte("painel", { aberto: false }); }, 0);
+  }
+
   function fecharPaineis() {
-    if (!$("#menu").hidden || !$("#config").hidden) ponte("painel", { aberto: false });
     $("#menu").hidden = true;
     $("#config").hidden = true;
     $("#ctx").hidden = true;
@@ -383,10 +391,10 @@
   }
 
   function alternarMenu() {
+    if (CAMADA_PEDE) { ponte("abrir-painel", { painel: "menu" }); return; }
     const abrir = $("#menu").hidden;
     fecharPaineis();
-    if (!abrir) return;
-    ponte("painel", { aberto: true });
+    if (!abrir) return verificarCamadaVazia();
     $("#menu").hidden = false;
     $("#botao-iniciar").setAttribute("aria-expanded", "true");
     $("#busca").value = "";
@@ -395,8 +403,8 @@
   }
 
   function abrirPersonalizar(aba = "tema") {
+    if (CAMADA_PEDE) { ponte("abrir-painel", { painel: "config", aba }); return; }
     fecharPaineis();
-    ponte("painel", { aberto: true });
     $("#config").hidden = false;
     trocarAba(aba);
   }
@@ -486,16 +494,19 @@
     document.addEventListener("click", (e) => {
       if (!e.target.closest("#ctx")) $("#ctx").hidden = true;
       if (e.target.isConnected && !e.target.closest(".painel, #barra, #ctx")) fecharPaineis();
+      verificarCamadaVazia();
     });
     $("#barra").addEventListener("contextmenu", (e) => {
       if (e.target.closest(".fixado")) return;
-      menuContexto(e, [["🎨 Personalizar barra", () => abrirPersonalizar("barra")], ["🧩 Estilo dos ícones", () => abrirPersonalizar("icones")]]);
+      if (CAMADA_PEDE) { e.preventDefault(); ponte("abrir-painel", { painel: "ctx-barra", x: e.clientX }); return; }
+      contextoBarra(e);
     });
-    $("#papel").addEventListener("contextmenu", (e) => menuContexto(e, [
-      ["🎨 Trocar tema", () => abrirPersonalizar("tema")], ["🖼️ Fundo da área de trabalho", () => abrirPersonalizar("fundo")],
-      ["⚙️ Configurações", () => abrirApp("configuracoes")], ["🖥️ Resolução da tela", () => abrirApp("configuracoes")]]));
+    $("#papel").addEventListener("contextmenu", (e) => {
+      if (CAMADA_PEDE) { e.preventDefault(); ponte("abrir-painel", { painel: "ctx-papel", x: e.clientX, y: e.clientY }); return; }
+      contextoPapel(e);
+    });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") fecharPaineis();
+      if (e.key === "Escape") { fecharPaineis(); verificarCamadaVazia(); }
       if (e.key === "Meta" || (e.key === " " && e.altKey)) alternarMenu();
     });
 
@@ -503,6 +514,30 @@
     setInterval(relogio, 1000);
     bateria();
   }
+
+  function contextoBarra(e) {
+    menuContexto(e, [["🎨 Personalizar barra", () => abrirPersonalizar("barra")], ["🧩 Estilo dos ícones", () => abrirPersonalizar("icones")]]);
+  }
+  function contextoPapel(e) {
+    menuContexto(e, [["🎨 Trocar tema", () => abrirPersonalizar("tema")], ["🖼️ Fundo da área de trabalho", () => abrirPersonalizar("fundo")],
+      ["⚙️ Configurações", () => abrirApp("configuracoes")], ["🖥️ Resolução da tela", () => abrirApp("configuracoes")]]);
+  }
+
+  // Chamado pelo vorticis-shell na camada "menu" quando a barra ou o papel pedem um painel.
+  window.vorticisAbrirPainel = (painel, dados = {}) => {
+    fecharPaineis();
+    const sup = document.body.classList.contains("barra-superior");
+    const altura = parseInt(getComputedStyle(document.body).getPropertyValue("--altura-barra"), 10) || 56;
+    // Menu de contexto da barra: logo acima (ou abaixo, se a barra está em cima) da barra.
+    const yBarra = sup ? altura + 8 : innerHeight - altura - 8 - 40 * 5;
+    const evento = { preventDefault() {}, clientX: dados.x || 0, clientY: dados.y !== undefined ? dados.y : yBarra };
+    if (painel === "menu") alternarMenu();
+    else if (painel === "config") abrirPersonalizar(dados.aba || "tema");
+    else if (painel === "ctx-app") contextoApp(evento, dados.app, true);
+    else if (painel === "ctx-barra") contextoBarra(evento);
+    else if (painel === "ctx-papel") contextoPapel(evento);
+    verificarCamadaVazia();
+  };
 
   // Chamado pelo vorticis-shell quando a outra camada (papel/barra) muda uma preferência.
   window.vorticisPreferencia = (chave, valor) => {

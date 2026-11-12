@@ -239,7 +239,10 @@ body.barra-superior #janelas { inset: var(--altura-barra) 0 0 0; }
 }
 
 /* ---------------- Modos dentro do SO (camadas separadas) ---------------- */
-body.modo-papel #barra, body.modo-papel .painel, body.modo-papel #aviso, body.modo-papel #janelas { display: none !important; }
+body.modo-papel #barra, body.modo-papel .painel, body.modo-papel #aviso, body.modo-papel #janelas, body.modo-papel #ctx { display: none !important; }
+body.modo-menu { background: transparent !important; }
+html:has(body.modo-menu), html:has(body.modo-barra) { background: transparent !important; }
+body.modo-menu #barra, body.modo-menu #papel, body.modo-menu #area, body.modo-menu #janelas { display: none !important; }
 body.modo-papel #area { inset: 0; }
 body.modo-barra { background: transparent !important; }
 body.modo-barra #papel, body.modo-barra #area, body.modo-barra #janelas { display: none; }

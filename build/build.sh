@@ -60,6 +60,7 @@ rm -rf "$INC/usr/share/vorticis/shell"
 cp -a "$RAIZ/shell" "$INC/usr/share/vorticis/shell"
 install -m 0755 "$RAIZ/shell/vorticis-shell" "$INC/usr/bin/vorticis-shell"
 install -m 0755 "$RAIZ/shell/vorticis-app" "$INC/usr/bin/vorticis-app"
+install -m 0755 "$RAIZ/shell/vorticis-sessao" "$INC/usr/bin/vorticis-sessao"
 install -m 0644 "$RAIZ"/shell/desktop/*.desktop "$INC/usr/share/applications/"
 echo "$VERSAO" > "$INC/etc/vorticis/versao"
 cat > "$INC/etc/os-release" <<OSR

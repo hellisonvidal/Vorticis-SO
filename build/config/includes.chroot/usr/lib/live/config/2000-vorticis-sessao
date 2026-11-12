@@ -12,7 +12,7 @@ grep -q '^\[initial_session\]' /etc/greetd/config.toml && exit 0
 cat >> /etc/greetd/config.toml <<CONF
 
 [initial_session]
-command = "labwc"
+command = "vorticis-sessao"
 user = "$USUARIO"
 CONF
 # Atalho do instalador na área de trabalho do live

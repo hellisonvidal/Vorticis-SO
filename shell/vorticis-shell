@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """vorticis-shell — inicia a área de trabalho do Vorticis SO no compositor Wayland.
 
-Cria duas superfícies (protocolo wlr-layer-shell):
+Cria três superfícies (protocolo wlr-layer-shell):
   * papel de parede  — camada BACKGROUND, tela inteira, água interativa;
-  * barra de tarefas — camada TOP, ancorada embaixo, reserva espaço (exclusive zone).
-Quando um menu abre, a barra cresce para a tela inteira e recebe o teclado.
+  * barra de tarefas — camada TOP, ancorada embaixo (ou em cima), reserva espaço;
+  * menus            — camada OVERLAY, tela inteira e transparente, só visível enquanto
+                       o menu, a personalização ou um menu de contexto estão abertos.
+Sem aceleração 3D (VMs, GPUs sem driver), o WebKit desenha por software (VORTICIS_SEM_GPU=1).
 
 Dependências (Debian 13): python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0
 """
@@ -27,10 +29,13 @@ import gi  # noqa: E402
 gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
+from gi.repository import Gdk, Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
 
 RAIZ = Path(os.environ.get("VORTICIS_SHELL_DIR", "/usr/share/vorticis/shell"))
 ALTURA_BARRA = 64
+SEM_GPU = os.environ.get("VORTICIS_SEM_GPU") == "1" or not list(Path("/dev/dri").glob("renderD*"))
+
+CSS_TRANSPARENTE = "window.vorticis-transparente, window.vorticis-transparente > * { background: transparent; }"
 
 
 def usuario_atual():
@@ -54,7 +59,13 @@ class Superficie:
         self.janela = Gtk.ApplicationWindow(application=app)
         LS.init_for_window(self.janela)
         LS.set_namespace(self.janela, f"vorticis-{modo}")
-        if modo == "papel":
+        if modo == "menu":
+            LS.set_layer(self.janela, LS.Layer.OVERLAY)
+            for borda in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+                LS.set_anchor(self.janela, borda, True)
+            LS.set_exclusive_zone(self.janela, -1)
+            LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND)
+        elif modo == "papel":
             LS.set_layer(self.janela, LS.Layer.BACKGROUND)
             for borda in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
                 LS.set_anchor(self.janela, borda, True)
@@ -77,13 +88,22 @@ class Superficie:
         self.web = WebKit.WebView(user_content_manager=gerente)
         cfg = self.web.get_settings()
         cfg.set_allow_file_access_from_file_urls(True)
-        cfg.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.ALWAYS)
-        if modo == "barra":
-            from gi.repository import Gdk
-            self.web.set_background_color(Gdk.RGBA(0, 0, 0, 0))
+        cfg.set_hardware_acceleration_policy(
+            WebKit.HardwareAccelerationPolicy.NEVER if SEM_GPU else WebKit.HardwareAccelerationPolicy.ALWAYS)
+        if modo in ("barra", "menu"):
+            self.janela.add_css_class("vorticis-transparente")
+            transparente = Gdk.RGBA()
+            transparente.parse("rgba(0,0,0,0)")
+            self.web.set_background_color(transparente)
         self.web.load_uri((RAIZ / "index.html").as_uri() + f"?modo={modo}")
         self.janela.set_child(self.web)
-        self.janela.present()
+        if modo == "menu":
+            self.janela.set_visible(False)
+        else:
+            self.janela.present()
+
+    def js(self, codigo):
+        self.web.evaluate_javascript(codigo, -1, None, None, None, None, None)
 
     def mensagem(self, _gerente, valor):
         try:
@@ -97,12 +117,13 @@ class Superficie:
                 subprocess.Popen(shlex.split(dados.get("cmd", "")), start_new_session=True)
             except (OSError, ValueError) as e:
                 print("vorticis-shell: falha ao abrir", dados.get("app"), e, file=sys.stderr)
-        elif acao == "painel" and self.modo == "barra":
-            aberto = bool(dados.get("aberto"))
-            # Menu aberto: a camada ocupa a tela toda (ancorada nas duas bordas) e recebe o teclado.
-            LS.set_anchor(self.janela, LS.Edge.TOP, aberto or self.posicao == "superior")
-            LS.set_anchor(self.janela, LS.Edge.BOTTOM, aberto or self.posicao == "inferior")
-            LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND if aberto else LS.KeyboardMode.NONE)
+        elif acao == "abrir-painel" and "menu" in CAMADAS:
+            # A barra ou o papel pedem um painel: mostra a camada de menus e abre o painel nela.
+            menu = CAMADAS["menu"]
+            menu.janela.present()
+            menu.js(f"window.vorticisAbrirPainel({json.dumps(dados.get('painel'))}, {json.dumps(dados)})")
+        elif acao == "painel" and self.modo == "menu" and not dados.get("aberto"):
+            self.janela.set_visible(False)
         elif acao == "barra" and self.modo == "barra":
             self.posicao = "superior" if dados.get("posicao") == "superior" else "inferior"
             altura = {"pequeno": 46, "medio": 56, "grande": 64}.get(dados.get("tamanho"), 56)
@@ -118,18 +139,25 @@ class Superficie:
                 subprocess.Popen(comandos[dados["acao"]], start_new_session=True)
         elif acao == "preferencia":
             chamada = f"window.vorticisPreferencia({json.dumps(dados.get('chave'))}, {json.dumps(dados.get('valor'))})"
-            for outra in SUPERFICIES:
+            for outra in CAMADAS.values():
                 if outra is not self:
-                    outra.web.evaluate_javascript(chamada, -1, None, None, None, None, None)
+                    outra.js(chamada)
         elif acao == "energia":
             subprocess.Popen(["vorticis-recursos", "energia", "desempenho" if dados.get("perfil") == "desempenho" else "equilibrado"])
 
 
-SUPERFICIES = []
+CAMADAS = {}
 
 
 def ativar(app):
-    SUPERFICIES.extend([Superficie(app, "papel"), Superficie(app, "barra")])
+    css = Gtk.CssProvider()
+    if hasattr(css, "load_from_string"):  # GTK ≥ 4.12
+        css.load_from_string(CSS_TRANSPARENTE)
+    else:
+        css.load_from_data(CSS_TRANSPARENTE, -1)
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    for modo in ("papel", "barra", "menu"):
+        CAMADAS[modo] = Superficie(app, modo)
 
 
 if __name__ == "__main__":
