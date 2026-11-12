@@ -218,7 +218,14 @@
   }
 
   /* ---------------- Detecção de capacidade ---------------- */
+  let qualidadeDetectada = null;
   function detectarQualidade() {
+    if (qualidadeDetectada) return qualidadeDetectada;
+    qualidadeDetectada = detectarQualidadeAgora();
+    return qualidadeDetectada;
+  }
+
+  function detectarQualidadeAgora() {
     try {
       if (global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches) return "estatico";
     } catch (_) { /* ignora */ }
@@ -233,6 +240,8 @@
         const info = gl.getExtension("WEBGL_debug_renderer_info");
         const gpu = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
         if (/llvmpipe|softpipe|swiftshader|software/i.test(gpu)) temGL = false; // renderização por software
+        const perder = gl.getExtension("WEBGL_lose_context");
+        if (perder) perder.loseContext(); // libera o contexto de teste
       }
     } catch (_) { temGL = false; }
     if (temGL && nucleos >= 2 && memoria >= 2) return "alto";
@@ -289,8 +298,13 @@
 
     _reconstruir() {
       this.pausar();
+      if (this.render instanceof RenderGL) {
+        const perder = this.render.gl.getExtension("WEBGL_lose_context");
+        if (perder) perder.loseContext();
+      }
       this.container.querySelectorAll("canvas").forEach((c) => c.remove());
       this.render = null;
+      this.canvas = null;
       if (!this.temaCores || this.qualidade === "estatico") return;
 
       const canvas = document.createElement("canvas");

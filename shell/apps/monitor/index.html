@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vorticis Monitor</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .medidores { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .medidor b { font-size: 26px; font-weight: 600; display: block; margin: 2px 0; font-variant-numeric: tabular-nums; }
+    .medidor canvas { width: 100%; height: 54px; display: block; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+    th { color: var(--texto-suave); font-weight: 500; font-size: 12px; cursor: pointer; position: sticky; top: 0; background: var(--fundo-app); }
+    td.num, th.num { text-align: right; }
+    tr:hover td { background: var(--superficie); }
+    tr.sel td { background: color-mix(in srgb, var(--destaque) 20%, transparent); }
+    .tabela { max-height: 52vh; overflow: auto; border: 1px solid var(--borda); border-radius: var(--raio); }
+    .acoes-proc { display: flex; gap: 8px; margin: 12px 0; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <header class="cabecalho">
+    <h1><span class="logo-app">📈</span> Vorticis Monitor</h1>
+    <span class="espaco"></span><span class="chip" id="info-sistema"></span>
+  </header>
+  <main class="conteudo">
+    <div class="medidores">
+      <div class="cartao medidor"><small class="suave">Processador</small><b id="v-cpu">–</b><small class="suave" id="d-cpu"></small><canvas id="g-cpu"></canvas></div>
+      <div class="cartao medidor"><small class="suave">Memória</small><b id="v-mem">–</b><small class="suave" id="d-mem"></small><canvas id="g-mem"></canvas></div>
+      <div class="cartao medidor"><small class="suave">Disco (sistema)</small><b id="v-disco">–</b><small class="suave" id="d-disco"></small><div class="barra-progresso" style="margin-top:20px"><i id="b-disco" style="width:0"></i></div></div>
+      <div class="cartao medidor"><small class="suave">Rede</small><b id="v-rede">–</b><small class="suave" id="d-rede"></small><canvas id="g-rede"></canvas></div>
+    </div>
+    <div class="acoes-proc">
+      <h2 style="flex:1;margin:0">Processos</h2>
+      <input class="campo" id="filtro" type="search" placeholder="Filtrar processos">
+      <button class="botao" id="encerrar" disabled>Encerrar</button>
+      <button class="botao perigo" id="forcar" disabled>Forçar encerramento</button>
+    </div>
+    <div class="tabela"><table>
+      <thead><tr><th data-c="nome">Nome</th><th data-c="pid" class="num">PID</th><th data-c="cpu" class="num">CPU %</th><th data-c="mem" class="num">Memória</th></tr></thead>
+      <tbody id="procs"></tbody>
+    </table></div>
+  </main>
+  <script src="../comum/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    const { el, bytes } = Vorticis;
+    const $ = (s) => document.querySelector(s);
+    const hist = { cpu: [], mem: [], rede: [] };
+    let ordem = "cpu", selecionado = null, ultimo = null;
+
+    // Dados simulados quando aberto fora do Vorticis SO
+    const nomesDemo = ["vorticis-shell", "firefox-esr", "labwc", "pipewire", "steam", "wine64-preloader", "waydroid", "vorticis-music", "Xwayland", "systemd", "NetworkManager", "foot"];
+    let fase = 0;
+    function demo() {
+      fase += 0.3;
+      const total = 8 * 1024 ** 3;
+      return { cpu: Math.round(18 + 14 * Math.sin(fase) + Math.random() * 10), memoria: { total, usada: total * (0.42 + 0.03 * Math.sin(fase / 3)) },
+        swap: { total: 4 * 1024 ** 3, usada: 120 * 1024 ** 2 }, disco: { total: 256e9, usado: 61e9 },
+        rede: { rx: Math.random() * 2e6, tx: Math.random() * 3e5 }, temperatura: 48 + Math.round(Math.random() * 6), carga: ["0.82", "0.71", "0.65"],
+        processos: nomesDemo.map((n, i) => ({ pid: 1000 + i * 37, nome: n, cpu: +(Math.random() * (12 - i)).toFixed(1), mem: (380 - i * 25) * 1024 ** 2 })) };
+    }
+
+    function grafico(id, dados, max) {
+      const c = $(id), w = (c.width = c.clientWidth * 2), h = (c.height = c.clientHeight * 2), g = c.getContext("2d");
+      const cor = getComputedStyle(document.documentElement).getPropertyValue("--destaque").trim() || "#38b6ff";
+      g.clearRect(0, 0, w, h);
+      if (dados.length < 2) return;
+      const passo = w / 59;
+      g.beginPath();
+      dados.forEach((v, i) => { const x = w - (dados.length - 1 - i) * passo, y = h - (v / max) * (h - 4) - 2; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+      g.strokeStyle = cor; g.lineWidth = 3; g.stroke();
+      g.lineTo(w, h); g.lineTo(w - (dados.length - 1) * passo, h); g.closePath();
+      g.globalAlpha = 0.18; g.fillStyle = cor; g.fill(); g.globalAlpha = 1;
+    }
+    const empurrar = (arr, v) => { arr.push(v); if (arr.length > 60) arr.shift(); };
+
+    function renderProcs() {
+      if (!ultimo) return;
+      const f = $("#filtro").value.toLowerCase();
+      const lista = ultimo.processos.filter((p) => p.nome.toLowerCase().includes(f))
+        .sort((a, b) => ordem === "nome" ? a.nome.localeCompare(b.nome) : b[ordem] - a[ordem]);
+      $("#procs").replaceChildren(...lista.map((p) => el("tr", { class: p.pid === selecionado ? "sel" : "", onclick: () => { selecionado = p.pid; atualizarBotoes(); renderProcs(); } }, [
+        el("td", { texto: p.nome }), el("td", { class: "num", texto: p.pid }), el("td", { class: "num", texto: p.cpu.toFixed(1) }), el("td", { class: "num", texto: bytes(p.mem) })])));
+    }
+    function atualizarBotoes() { $("#encerrar").disabled = $("#forcar").disabled = selecionado === null; }
+
+    async function ciclo() {
+      const d = (await Vorticis.executarJSON("vorticis-sistema", ["agora", "--json"], demo)) || demo();
+      ultimo = d;
+      const memPct = (d.memoria.usada / d.memoria.total) * 100;
+      $("#v-cpu").textContent = d.cpu.toFixed(0) + "%";
+      $("#d-cpu").textContent = `Carga ${d.carga.join(" / ")}${d.temperatura ? " · " + Math.round(d.temperatura) + " °C" : ""}`;
+      $("#v-mem").textContent = memPct.toFixed(0) + "%";
+      $("#d-mem").textContent = `${bytes(d.memoria.usada)} de ${bytes(d.memoria.total)} · swap ${bytes(d.swap.usada)}`;
+      $("#v-disco").textContent = ((d.disco.usado / d.disco.total) * 100).toFixed(0) + "%";
+      $("#d-disco").textContent = `${bytes(d.disco.usado)} de ${bytes(d.disco.total)}`;
+      $("#b-disco").style.width = (d.disco.usado / d.disco.total) * 100 + "%";
+      $("#v-rede").textContent = "↓ " + bytes(d.rede.rx) + "/s";
+      $("#d-rede").textContent = "↑ " + bytes(d.rede.tx) + "/s";
+      empurrar(hist.cpu, d.cpu); empurrar(hist.mem, memPct); empurrar(hist.rede, d.rede.rx);
+      grafico("#g-cpu", hist.cpu, 100); grafico("#g-mem", hist.mem, 100); grafico("#g-rede", hist.rede, Math.max(1e5, ...hist.rede));
+      renderProcs();
+      setTimeout(ciclo, 1500);
+    }
+
+    async function encerrar(forcar) {
+      const p = ultimo.processos.find((x) => x.pid === selecionado);
+      if (!p || !confirm(`${forcar ? "Forçar o encerramento" : "Encerrar"} de “${p.nome}”?`)) return;
+      const r = await Vorticis.executar("vorticis-sistema", ["encerrar", String(p.pid)].concat(forcar ? ["--forcar"] : []), { codigo: 0, saida: "" });
+      Vorticis.toast(r.codigo === 0 ? `${p.nome} encerrado.` : (r.saida || "Não foi possível encerrar."));
+      selecionado = null; atualizarBotoes();
+    }
+    $("#encerrar").onclick = () => encerrar(false);
+    $("#forcar").onclick = () => encerrar(true);
+    $("#filtro").oninput = renderProcs;
+    document.querySelectorAll("th[data-c]").forEach((th) => (th.onclick = () => { ordem = th.dataset.c; renderProcs(); }));
+    Vorticis.executarJSON("vorticis-sistema", ["info", "--json"], { sistema: "Vorticis SO 0.2 (demonstração)", kernel: "6.12", cpu: "" })
+      .then((i) => i && ($("#info-sistema").textContent = `${i.sistema} · kernel ${i.kernel}`));
+    ciclo();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configurações Vorticis</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+    pre.saida {
+      background: rgba(0, 0, 0, .28); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px;
+      white-space: pre-wrap; font: 12.5px/1.5 "JetBrains Mono", "Fira Code", ui-monospace, monospace; min-height: 60px; max-height: 50vh; overflow: auto;
+    }
+    .form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+    .grupo { margin-top: 22px; }
+    .grupo h3 { margin: 0 0 6px; font-size: 15px; }
+    .grupo p { margin: 0 0 8px; color: var(--texto-suave); }
+  </style>
+</head>
+<body>
+  <header class="cabecalho"><h1><span class="logo-app">⚙️</span> Configurações</h1></header>
+  <div class="corpo">
+    <nav class="lateral" id="lateral"></nav>
+    <main class="conteudo" id="conteudo"></main>
+  </div>
+  <script src="../comum/app.js"></script>
+  <script src="configuracoes.js"></script>
+</body>
+</html>

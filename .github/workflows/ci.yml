@@ -2,11 +2,13 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
     inputs:
       gerar_iso:
-        description: "Gerar a ISO"
+        description: "Gerar a ISO (artefato do workflow)"
         type: boolean
         default: false
 
@@ -16,34 +18,68 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Ferramentas Python compilam
-        run: for f in tools/vorticis-* shell/vorticis-shell; do python3 -m py_compile "$f"; done
+        run: for f in tools/vorticis-* shell/vorticis-shell shell/vorticis-app; do python3 -m py_compile "$f"; done
       - name: Ferramentas respondem --help
-        run: for f in tools/vorticis-*; do python3 "$f" --help > /dev/null; done
+        run: for f in tools/vorticis-*; do [ "$(basename $f)" = vorticis-midia ] && continue; python3 "$f" --help > /dev/null; done
       - name: Simulações
         run: |
           python3 tools/vorticis-recursos aplicar --simular
           python3 tools/vorticis-usuarios criar teste --nivel infantil --simular
           python3 tools/vorticis-compat preparar todos --simular
+          python3 tools/vorticis-compat receitas
+          python3 tools/vorticis-apps catalogo
           python3 tools/vorticis-drivers sugerir
+          python3 tools/vorticis-sistema info
       - name: Scripts shell (shellcheck)
         run: shellcheck -S warning build/build.sh installer/linux/vorticis-instalar-daqui build/config/hooks/normal/*.hook.chroot
       - name: Regras do firewall (nft -c)
         run: sudo apt-get install -y nftables && sudo nft -c -f security/nftables.conf
-      - name: JSON dos temas
-        run: for f in shell/themes/*.json; do python3 -m json.tool "$f" > /dev/null; done
+      - name: JSON válidos
+        run: for f in shell/themes/*.json shell/apps/central/catalogo.json tools/compat/receitas.json; do python3 -m json.tool "$f" > /dev/null; done
 
   iso:
-    if: github.event_name == 'workflow_dispatch' && inputs.gerar_iso || startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.gerar_iso)
     needs: verificar
     runs-on: ubuntu-latest
-    container:
-      image: debian:trixie
-      options: --privileged
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y live-build ca-certificates
-      - run: ./build/build.sh
+      - name: Liberar espaço em disco no runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+      - name: Gerar a ISO (Debian 13 + live-build, contêiner privilegiado)
+        run: |
+          VERSAO="${GITHUB_REF_NAME#v}"
+          case "$VERSAO" in [0-9]*) ;; *) VERSAO="0.2-teste" ;; esac
+          echo "VERSAO=$VERSAO" >> "$GITHUB_ENV"
+          sudo docker run --rm --privileged -v "$PWD":/src -w /src -e VORTICIS_VERSAO="$VERSAO" \
+            -e VORTICIS_TRABALHO=/tmp/vorticis debian:trixie \
+            bash -c "apt-get update && apt-get install -y live-build ca-certificates curl && ./build/build.sh"
+          ls -la build/
+      - name: Conferir tamanho (limite de 2 GiB por arquivo nas releases do GitHub)
+        run: |
+          TAM=$(stat -c %s build/vorticis-*.iso)
+          echo "Tamanho da ISO: $((TAM / 1024 / 1024)) MiB"
+          if [ "$TAM" -ge 2147483648 ]; then
+            echo "ISO maior que 2 GiB: dividindo em partes"
+            cd build && split -b 1900M -d "vorticis-${VERSAO}-amd64.iso" "vorticis-${VERSAO}-amd64.iso.parte" && rm "vorticis-${VERSAO}-amd64.iso"
+          fi
       - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: vorticis-iso
-          path: build/vorticis-*.iso*
+          path: build/vorticis-*
+          retention-days: 7
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Vorticis SO ${{ env.VERSAO }}
+          body_path: docs/NOTAS-DA-VERSAO.md
+          files: |
+            build/vorticis-*
+            installer/windows/Instalar-Vorticis.ps1
+            installer/linux/vorticis-instalar-daqui

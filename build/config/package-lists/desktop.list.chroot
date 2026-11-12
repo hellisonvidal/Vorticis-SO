@@ -9,6 +9,7 @@ foot
 fuzzel
 mako-notifier
 wl-clipboard
+lxpolkit
 grim
 slurp
 xdg-desktop-portal-wlr
@@ -40,11 +41,6 @@ nautilus
 loupe
 gnome-software
 gnome-software-plugin-flatpak
-gnome-calendar
-libreoffice-gtk3
-libreoffice-l10n-pt-br
-thunderbird
-rhythmbox
 fonts-inter
 fonts-noto-color-emoji
 fonts-noto-core

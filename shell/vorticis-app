@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""vorticis-app — abre um app Vorticis (Music, Video, Central de Apps, Configurações...) em janela própria.
+
+Uso:
+  vorticis-app musica [ARQUIVOS...]
+  vorticis-app video [ARQUIVOS...]
+  vorticis-app central | configuracoes [--secao ID] | monitor | notas | calculadora
+
+Os apps são páginas HTML em /usr/share/vorticis/shell/apps renderizadas pelo WebKitGTK. A ponte
+"vorticis" permite que a página execute APENAS as ferramentas vorticis-* (lista fixa abaixo),
+nunca comandos arbitrários.
+Dependências: python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0
+"""
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import threading
+from pathlib import Path
+from urllib.parse import quote
+
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("WebKit", "6.0")
+from gi.repository import Gio, GLib, Gtk, WebKit  # noqa: E402
+
+RAIZ = Path(os.environ.get("VORTICIS_SHELL_DIR", "/usr/share/vorticis/shell"))
+APPS = {
+    "musica":        ("Vorticis Music", "org.vorticis.Music", (1100, 720)),
+    "video":         ("Vorticis Video Player", "org.vorticis.Video", (1100, 680)),
+    "central":       ("Central de Apps", "org.vorticis.Central", (1180, 760)),
+    "configuracoes": ("Configurações", "org.vorticis.Configuracoes", (1100, 720)),
+    "monitor":       ("Vorticis Monitor", "org.vorticis.Monitor", (980, 700)),
+    "notas":         ("Vorticis Notas", "org.vorticis.Notas", (900, 620)),
+    "calculadora":   ("Vorticis Calculadora", "org.vorticis.Calculadora", (380, 600)),
+}
+PERMITIDOS = {"vorticis-apps", "vorticis-sistema", "vorticis-midia", "vorticis-tela", "vorticis-drivers", "vorticis-rede",
+              "vorticis-usuarios", "vorticis-recursos", "vorticis-backup", "vorticis-compat", "vorticis-jogos", "vorticis-navegadores"}
+
+
+def terminal(cmd):
+    """Abre o comando num terminal (para ações que pedem senha ou mostram progresso)."""
+    linha = " ".join(shlex.quote(c) for c in cmd)
+    script = (f"{linha} || {{ echo; echo '→ Tentando como administrador…'; sudo {linha}; }}; "
+              "echo; read -r -p 'Concluído. Pressione Enter para fechar.' _")
+    for term in (["foot", "-e"], ["gnome-terminal", "--"], ["x-terminal-emulator", "-e"]):
+        if shutil.which(term[0]):
+            subprocess.Popen(term + ["bash", "-c", script], start_new_session=True)
+            return 0
+    return 127
+
+
+class Janela:
+    def __init__(self, app, nome, arquivos, secao=None):
+        titulo, _id, (w, h) = APPS[nome]
+        self.janela = Gtk.ApplicationWindow(application=app, title=titulo)
+        self.janela.set_default_size(w, h)
+        gerente = WebKit.UserContentManager()
+        gerente.register_script_message_handler("vorticis", None)
+        gerente.connect("script-message-received::vorticis", self.mensagem)
+        self.web = WebKit.WebView(user_content_manager=gerente)
+        cfg = self.web.get_settings()
+        cfg.set_allow_file_access_from_file_urls(True)
+        cfg.set_allow_universal_access_from_file_urls(True)
+        cfg.set_enable_media_stream(True)
+        cfg.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.ALWAYS)
+        consulta = [f"abrir={quote(Path(a).resolve().as_uri() if '://' not in a else a, safe='')}" for a in arquivos]
+        if secao:
+            consulta.append(f"secao={quote(secao)}")
+        url = (RAIZ / "apps" / nome / "index.html").as_uri() + ("?" + "&".join(consulta) if consulta else "")
+        self.web.load_uri(url)
+        self.web.connect("decide-policy", self.politica)
+        self.janela.set_child(self.web)
+        self.janela.present()
+
+    def politica(self, _web, decisao, tipo):
+        # Links externos abrem no navegador padrão, não dentro do app.
+        if tipo == WebKit.PolicyDecisionType.NEW_WINDOW_ACTION:
+            uri = decisao.get_navigation_action().get_request().get_uri()
+            subprocess.Popen(["xdg-open", uri])
+            decisao.ignore()
+            return True
+        return False
+
+    def responder(self, ident, codigo, saida):
+        js = f"window.__vorticisResposta({int(ident)}, {json.dumps({'codigo': codigo, 'saida': saida}, ensure_ascii=False)})"
+        self.web.evaluate_javascript(js, -1, None, None, None, None, None)
+        return False
+
+    def mensagem(self, _gerente, valor):
+        try:
+            dados = json.loads(valor.to_string())
+        except ValueError:
+            return
+        if dados.get("acao") != "executar":
+            return
+        ident, cmd = dados.get("id", 0), dados.get("cmd", "")
+        args = [str(a) for a in dados.get("args", [])]
+        if cmd == "@terminal":
+            if not args or args[0] not in PERMITIDOS:
+                return self.responder(ident, 126, "Comando não permitido.")
+            return self.responder(ident, terminal(args), "Aberto no terminal.")
+        if cmd not in PERMITIDOS:
+            return self.responder(ident, 126, f"Comando não permitido: {cmd}")
+
+        def trabalhar():
+            try:
+                r = subprocess.run([cmd] + args, capture_output=True, text=True, timeout=3600)
+                codigo, saida = r.returncode, (r.stdout + (("\n" + r.stderr) if r.returncode else "")).strip()
+            except (OSError, subprocess.TimeoutExpired) as e:
+                codigo, saida = 1, str(e)
+            GLib.idle_add(self.responder, ident, codigo, saida)
+
+        threading.Thread(target=trabalhar, daemon=True).start()
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] not in APPS:
+        sys.exit(__doc__)
+    nome = args[0]
+    secao = None
+    if "--secao" in args:
+        i = args.index("--secao")
+        secao = args[i + 1] if i + 1 < len(args) else None
+        args = args[:i] + args[i + 2:]
+    arquivos = [a for a in args[1:] if a]
+    app = Gtk.Application(application_id=APPS[nome][1], flags=Gio.ApplicationFlags.NON_UNIQUE)
+    app.connect("activate", lambda a: Janela(a, nome, arquivos, secao))
+    app.run(None)
+
+
+if __name__ == "__main__":
+    main()

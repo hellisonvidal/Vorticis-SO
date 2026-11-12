@@ -6,6 +6,11 @@ Uso:
   vorticis-drivers sugerir [--json]    lista drivers/firmwares recomendados
   vorticis-drivers instalar [--auto] [--simular]
   vorticis-drivers firmware [--simular]  atualiza BIOS/UEFI e firmware de dispositivos (fwupd/LVFS)
+  vorticis-drivers kernel-recente [--simular]  kernel/firmware do backports para hardware muito novo
+
+Cobre: GPUs NVIDIA (open/proprietário)/AMD/Intel e híbridas, Wi-Fi/Bluetooth (Intel, Realtek,
+MediaTek, Atheros, Broadcom), áudio SOF, Thunderbolt, impressão digital, controles de jogo,
+mesas Wacom, Logitech, impressoras e scanners sem driver, sensores de tablets 2-em-1.
 
 Fontes de informação, em ordem:
   1. Regras próprias do Vorticis (GPU, Wi-Fi, Bluetooth, microcódigo, impressoras)
@@ -29,13 +34,20 @@ VENDORS = {
     "168c": "Qualcomm Atheros", "17cb": "Qualcomm", "14c3": "MediaTek", "1969": "Qualcomm Atheros (Ethernet)",
     "8087": "Intel", "0bda": "Realtek", "0a5c": "Broadcom", "0e8d": "MediaTek", "04f9": "Brother",
     "03f0": "HP", "04a9": "Canon", "04b8": "Epson", "1d6b": "Linux Foundation", "15ad": "VMware", "80ee": "VirtualBox",
-    "1af4": "Red Hat (VirtIO)", "1b36": "Red Hat (QEMU)",
+    "1af4": "Red Hat (VirtIO)", "1b36": "Red Hat (QEMU)", "045e": "Microsoft", "054c": "Sony", "057e": "Nintendo",
+    "28de": "Valve", "056a": "Wacom", "046d": "Logitech", "06cb": "Synaptics", "27c6": "Goodix", "138a": "Validity",
+    "04f3": "Elan", "1c7a": "LighTuning", "2109": "VIA", "8086:thunderbolt": "Intel", "1532": "Razer", "1b1c": "Corsair",
 }
+# Leitores de impressão digital (fabricantes USB) → fprintd/libfprint
+LEITORES_DIGITAL = {"06cb", "27c6", "138a", "04f3", "1c7a", "298d", "10a5"}
+# Controles de jogo (USB/Bluetooth) → regras udev da Steam + xpad/hid-playstation/hid-nintendo do kernel
+CONTROLES = {"045e": "Xbox", "054c": "PlayStation", "057e": "Nintendo Switch", "28de": "Steam", "2dc8": "8BitDo", "0f0d": "Hori"}
 
 # Classe PCI (2 primeiros bytes) → categoria
 CLASSES_PCI = {"0300": "vídeo", "0302": "vídeo", "0380": "vídeo", "0200": "rede cabeada", "0280": "wi-fi",
                "0403": "áudio", "0c03": "usb", "0106": "armazenamento", "0108": "armazenamento (NVMe)",
-               "0d11": "bluetooth"}
+               "0d11": "bluetooth", "0c0a": "thunderbolt", "0880": "sensores/sistema", "0c05": "smbus",
+               "0d40": "wi-fi", "0b40": "coprocessador"}
 # Classe de interface USB → categoria
 CLASSES_USB = {"e0": "bluetooth", "07": "impressora", "0e": "câmera", "01": "áudio", "08": "armazenamento", "03": "entrada (HID)"}
 
@@ -130,6 +142,9 @@ def sugerir():
             add("mesa-vulkan-drivers:i386", "Vulkan 32 bits (jogos Windows antigos)")
             if v == "10de":
                 pacote = "nvidia-driver"
+                # Turing (GTX 16xx/RTX 20xx) em diante: módulo de kernel aberto da NVIDIA (recomendado por ela).
+                if int(d["device"] or "0", 16) >= 0x1e00:
+                    add("nvidia-open-kernel-dkms", "módulo de kernel aberto NVIDIA (GPUs Turing ou mais novas)")
                 if shutil.which("nvidia-detect"):
                     saida = subprocess.run(["nvidia-detect"], capture_output=True, text=True).stdout
                     m = re.search(r"install the\s+(\S+)\s+package", saida)
@@ -155,6 +170,19 @@ def sugerir():
                 add("broadcom-sta-dkms", "driver Wi-Fi Broadcom (wl) — usado quando brcmfmac não suporta o chip")
         elif cat == "áudio" and v == "8086":
             add("firmware-sof-signed", "firmware de áudio Intel SOF (notebooks recentes)")
+            add("firmware-intel-sound", "firmware de áudio Intel (DSP)")
+        elif cat == "thunderbolt":
+            add("bolt", "autorização de dispositivos Thunderbolt/USB4 (docks, eGPU)")
+        if cat in ("wi-fi", "rede cabeada") and not d["driver"]:
+            add("@kernel-recente", f"{d['fabricante']} {d['vendor']}:{d['device']} sem driver no kernel atual — kernel mais novo (backports) costuma resolver")
+
+    gpus = {d["vendor"] for d in pci if d["categoria"] == "vídeo"}
+    if len(gpus) > 1:
+        add("switcheroo-control", "notebook com duas GPUs: permite abrir apps/jogos na GPU dedicada")
+    if fabricante_cpu() == "intel":
+        add("thermald", "controle térmico Intel (evita superaquecimento e quedas de desempenho)")
+    if any((SYS / "bus/iio/devices").glob("iio:device*")):
+        add("iio-sensor-proxy", "sensores de rotação/luz (tela gira e brilho automático em 2-em-1)")
 
     for d in usb:
         if d["categoria"] == "bluetooth":
@@ -167,6 +195,17 @@ def sugerir():
             add(extras.get(d["vendor"], "printer-driver-all"), f"driver da impressora {d.get('nome') or d['fabricante']}")
         elif d["categoria"] == "câmera":
             add("v4l-utils", "ferramentas da webcam")
+        if d["vendor"] in LEITORES_DIGITAL:
+            add("fprintd", f"leitor de impressão digital {d['fabricante']} (login por digital)")
+            add("libpam-fprintd", "login e sudo com impressão digital")
+        if d["vendor"] in CONTROLES:
+            add("steam-devices", f"controle {CONTROLES[d['vendor']]} reconhecido em jogos (regras udev)")
+        if d["vendor"] == "056a":
+            add("libwacom-common", "mesa digitalizadora Wacom (pressão e botões)")
+        if d["vendor"] == "046d" and "receiver" in (d.get("nome") or "").lower():
+            add("solaar", "configuração de mouses/teclados Logitech (receptor Unifying/Bolt)")
+        if d["categoria"] == "outro" and re.search(r"scan", d.get("nome") or "", re.I):
+            add("sane-airscan", "scanner (protocolo eSCL/WSD, sem driver)")
 
     for fw in firmware_faltando():
         for prefixo, pacote in FIRMWARE_POR_PREFIXO.items():
@@ -179,7 +218,7 @@ def sugerir():
         for linha in r.stdout.split():
             add(linha.strip(), "recomendado pelo isenkram para o hardware detectado")
 
-    instalados = pacotes_instalados(list(sug))
+    instalados = pacotes_instalados([p for p in sug if not p.startswith("@")])
     return [{"pacote": p, "motivo": m, "instalado": p in instalados} for p, m in sug.items()]
 
 
@@ -207,8 +246,9 @@ def rodar(cmd, simular):
 def cmd_listar(_a):
     for d in list(dispositivos_pci()) + list(dispositivos_usb()):
         nome = d.get("nome") or ""
+        alerta = "  ⚠ SEM DRIVER" if d["barramento"] == "pci" and not d["driver"] and d["categoria"] != "outro" else ""
         print(f"[{d['barramento']}] {d['categoria']:<22} {d['fabricante']:<18} {d['vendor']}:{d['device']}  "
-              f"driver={d['driver'] or '-'} {nome}")
+              f"driver={d['driver'] or '-'} {nome}{alerta}")
 
 
 def cmd_sugerir(a):
@@ -233,11 +273,29 @@ def cmd_instalar(a):
     if not (a.auto or a.simular):
         if input("Continuar? [S/n] ").strip().lower() not in ("", "s", "sim", "y"):
             return
+    if any(s["pacote"] == "@kernel-recente" for s in faltando):
+        cmd_kernel_recente(a)
+        faltando = [s for s in faltando if s["pacote"] != "@kernel-recente"]
     if any(":i386" in s["pacote"] for s in faltando):
         rodar(["dpkg", "--add-architecture", "i386"], a.simular)
     rodar(["apt-get", "update"], a.simular)
     rodar(["apt-get", "install", "-y", "--no-install-recommends"] + [s["pacote"] for s in faltando], a.simular)
     print("Reinicie o computador para carregar os novos drivers.")
+
+
+def cmd_kernel_recente(a):
+    """Ativa o trixie-backports e instala kernel + firmware mais novos (hardware lançado após o Debian 13)."""
+    lista = "deb http://deb.debian.org/debian trixie-backports main contrib non-free non-free-firmware\n"
+    destino = Path("/etc/apt/sources.list.d/vorticis-backports.list")
+    print(("[simulação] " if a.simular else "→ ") + f"escrever {destino}")
+    if not a.simular:
+        if os.geteuid() != 0:
+            sys.exit("Rode com sudo.")
+        destino.write_text(lista)
+    rodar(["apt-get", "update"], a.simular)
+    rodar(["apt-get", "install", "-y", "-t", "trixie-backports", "linux-image-amd64", "linux-headers-amd64",
+           "firmware-linux", "firmware-linux-nonfree", "firmware-misc-nonfree"], a.simular)
+    print("Kernel mais novo instalado: o anterior continua no menu de boot como alternativa segura.")
 
 
 def cmd_firmware(a):
@@ -260,6 +318,7 @@ def main():
     sub.add_parser("listar").set_defaults(f=cmd_listar)
     p = sub.add_parser("sugerir"); p.add_argument("--json", action="store_true"); p.set_defaults(f=cmd_sugerir)
     p = sub.add_parser("instalar"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_instalar)
+    p = sub.add_parser("kernel-recente"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_kernel_recente)
     p = sub.add_parser("firmware"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_firmware)
     a = ap.parse_args()
     a.f(a)

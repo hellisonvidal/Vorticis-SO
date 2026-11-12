@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Central de Apps
+Comment=Instale e atualize aplicativos
+Exec=vorticis-app central
+Icon=system-software-install
+Categories=System;PackageManager;
+Terminal=false
+StartupWMClass=org.vorticis.Central

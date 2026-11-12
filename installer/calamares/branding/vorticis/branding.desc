@@ -11,10 +11,10 @@ navigation: widget
 strings:
   productName:         Vorticis SO
   shortProductName:    Vorticis
-  version:             0.1
-  shortVersion:        0.1
-  versionedName:       Vorticis SO 0.1 "Nascente"
-  shortVersionedName:  Vorticis 0.1
+  version:             0.2
+  shortVersion:        0.2
+  versionedName:       Vorticis SO 0.2 "Correnteza"
+  shortVersionedName:  Vorticis 0.2
   bootloaderEntryName: Vorticis
   productUrl:          https://github.com/hellisonvidal/Vorticis-SO
   supportUrl:          https://github.com/hellisonvidal/Vorticis-SO/issues

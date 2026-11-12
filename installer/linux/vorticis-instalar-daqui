@@ -14,7 +14,7 @@
 #   --simular         mostra o que seria feito
 set -eu
 
-VERSAO="0.1"
+VERSAO="0.2"
 URL="https://github.com/hellisonvidal/Vorticis-SO/releases/download/v${VERSAO}/vorticis-${VERSAO}-amd64.iso"
 DESTINO_DIR="/vorticis"
 MODO="boot-iso"

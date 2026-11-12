@@ -1,0 +1,61 @@
+{
+  "_comentario": "Receitas de compatibilidade Windows. 'padroes' são regex (sem distinção de maiúsculas) aplicadas ao nome do instalador. 'verbos' são verbos do winetricks.",
+  "padrao": {
+    "arquitetura": "win64",
+    "versao_windows": "win10",
+    "verbos": ["corefonts", "vcrun2022"]
+  },
+  "receitas": [
+    {
+      "id": "office-2016",
+      "nome": "Microsoft Office 2013/2016 (32 bits)",
+      "padroes": ["office", "setup.*o365", "proplus", "hom(e|estudent)"],
+      "arquitetura": "win32",
+      "versao_windows": "win7",
+      "verbos": ["corefonts", "msxml6", "riched20", "gdiplus", "vcrun2019", "dotnet48"],
+      "dlls_nativas": ["riched20", "msxml6"],
+      "aviso": "Office 2013/2016 32 bits funciona bem. Microsoft 365 / Office 2019+ não instala no Wine: use 'vorticis-compat office web' ou 'vorticis-compat windows-vm'."
+    },
+    {
+      "id": "photoshop-cs6",
+      "nome": "Adobe Photoshop CS6/CC 2015",
+      "padroes": ["photoshop", "adobe.*cs6"],
+      "arquitetura": "win64",
+      "versao_windows": "win7",
+      "verbos": ["corefonts", "vcrun2010", "vcrun2012", "vcrun2013", "msxml3", "msxml6", "atmlib", "gdiplus"],
+      "aviso": "Versões Creative Cloud recentes exigem a VM do Windows."
+    },
+    {
+      "id": "dotnet",
+      "nome": "Aplicativos .NET Framework",
+      "padroes": ["\\.net", "dotnet", "wpf"],
+      "verbos": ["corefonts", "dotnet48", "vcrun2022"]
+    },
+    {
+      "id": "jogo-directx",
+      "nome": "Jogos DirectX 9–12 fora da Steam",
+      "padroes": ["game", "jogo", "launcher", "setup_.*gog", "unity", "unreal"],
+      "verbos": ["corefonts", "vcrun2022", "d3dcompiler_47", "dxvk", "vkd3d", "xact", "faudio"],
+      "aviso": "Para jogos, prefira Steam (Proton), Heroic (Epic/GOG) ou Lutris: já trazem ajustes por título."
+    },
+    {
+      "id": "java",
+      "nome": "Programas Java para Windows",
+      "padroes": ["java", "jre", "\\.jar"],
+      "verbos": ["corefonts"],
+      "aviso": "Se houver versão .jar do programa, rode-a nativamente com 'java -jar' (mais rápido que pelo Wine)."
+    },
+    {
+      "id": "banco-receita",
+      "nome": "Programas governamentais/bancários (IRPF, módulos de segurança)",
+      "padroes": ["irpf", "receita", "warsaw", "guardiao", "sefaz", "esocial", "certificado"],
+      "verbos": ["corefonts", "vcrun2022"],
+      "aviso": "O programa do IRPF tem versão Linux oficial (instale pela Central de Apps). Módulos de segurança bancária (Warsaw) também têm versão Linux .deb."
+    }
+  ],
+  "sem_suporte_wine": [
+    { "padroes": ["autocad", "revit", "solidworks", "creative.?cloud", "premiere", "after.?effects", "office.*(2019|2021|2024|365)"],
+      "motivo": "Este programa não funciona bem no Wine.",
+      "alternativa": "Use 'vorticis-compat windows-vm' (Windows real em máquina virtual, com janelas integradas à área de trabalho)." }
+  ]
+}

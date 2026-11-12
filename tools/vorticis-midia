@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""vorticis-midia — lista músicas e vídeos do usuário para o Vorticis Music / Video.
+
+Uso:
+  vorticis-midia listar {audio,video} [PASTA...]   imprime JSON com nome, url (file://) e tamanho
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+EXT = {
+    "audio": {".mp3", ".flac", ".ogg", ".oga", ".opus", ".m4a", ".aac", ".wav", ".wma"},
+    "video": {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".ogv", ".mpg", ".mpeg", ".ts", ".wmv", ".srt", ".vtt"},
+}
+LIMITE = 5000
+
+
+def pasta_xdg(tipo):
+    chave = "MUSIC" if tipo == "audio" else "VIDEOS"
+    try:
+        r = subprocess.run(["xdg-user-dir", chave], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return Path(r.stdout.strip())
+    except OSError:
+        pass
+    return Path.home() / ("Música" if tipo == "audio" else "Vídeos")
+
+
+def main():
+    if len(sys.argv) < 3 or sys.argv[1] != "listar" or sys.argv[2] not in EXT:
+        sys.exit(__doc__)
+    tipo = sys.argv[2]
+    pastas = [Path(p).expanduser() for p in sys.argv[3:]] or [pasta_xdg(tipo)]
+    itens = []
+    for pasta in pastas:
+        for raiz, dirs, arquivos in os.walk(pasta):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for a in sorted(arquivos):
+                caminho = Path(raiz) / a
+                if caminho.suffix.lower() in EXT[tipo]:
+                    try:
+                        tam = caminho.stat().st_size
+                    except OSError:
+                        continue
+                    itens.append({"nome": a, "url": caminho.as_uri(), "caminho": str(caminho.relative_to(pasta.parent)), "tamanho": tam})
+                    if len(itens) >= LIMITE:
+                        break
+    print(json.dumps(itens, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

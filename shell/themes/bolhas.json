@@ -1,0 +1,24 @@
+{
+  "id": "bolhas",
+  "nome": "Bolhas",
+  "descricao": "Bolhas sobem do fundo e fogem do mouse.",
+  "efeito": "bolhas",
+  "fundoApp": "#041a36",
+  "fundoEstatico": "linear-gradient(180deg, #1679c9 0%, #062a5a 100%)",
+  "cores": {
+    "destaque": "#4cc3ff",
+    "destaqueForte": "#1293ff",
+    "texto": "#eaf6ff",
+    "textoSuave": "#a9c3d9",
+    "painel": "rgba(4, 26, 54, 0.62)",
+    "painelBorda": "rgba(255,255,255,0.14)",
+    "item": "rgba(255,255,255,0.07)",
+    "itemHover": "rgba(255,255,255,0.16)"
+  },
+  "agua": {
+    "corFundo": "#031a3b",
+    "corMeio": "#1679c9",
+    "corBrilho": "#dff4ff"
+  },
+  "animado": true
+}

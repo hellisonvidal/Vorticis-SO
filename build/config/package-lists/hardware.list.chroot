@@ -1,0 +1,32 @@
+# Drivers e suporte a hardware ampliado
+bluez-firmware
+firmware-brcm80211
+firmware-mediatek
+firmware-intel-sound
+firmware-ath9k-htc
+firmware-bnx2
+firmware-bnx2x
+steam-devices
+fprintd
+libpam-fprintd
+sane-airscan
+sane-utils
+switcheroo-control
+iio-sensor-proxy
+bolt
+thermald
+smartmontools
+inxi
+ddcutil
+edid-decode
+libinput-tools
+libwacom-common
+usbmuxd
+ifuse
+wlr-randr
+kanshi
+# Ferramentas de sistema
+gnome-disk-utility
+btrfs-progs
+snapper
+gnome-text-editor

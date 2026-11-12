@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vorticis Video Player</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    body { background: #000; }
+    .cabecalho { background: var(--fundo-app); }
+    .palco { flex: 1; position: relative; display: flex; min-height: 0; }
+    .tela { flex: 1; position: relative; background: #000; display: grid; place-items: center; min-width: 0; }
+    video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+    video::cue { background: rgba(0, 0, 0, .65); color: #fff; font-size: 1.15em; }
+    .inicio { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--texto-suave);
+      background: radial-gradient(ellipse at center, #0b3a66 0%, #020b16 70%); }
+    .inicio b { font-size: 64px; display: block; }
+    .inicio .botao { margin: 6px; }
+    .barra-video {
+      position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 16px 12px;
+      background: linear-gradient(transparent, rgba(0, 0, 0, .85)); transition: opacity .25s;
+    }
+    .tela.ocioso .barra-video, .tela.ocioso .titulo-video { opacity: 0; }
+    .tela.ocioso { cursor: none; }
+    .titulo-video { position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px 30px; background: linear-gradient(rgba(0,0,0,.7), transparent); transition: opacity .25s; font-weight: 500; }
+    .linha-tempo { display: flex; gap: 10px; align-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .linha-tempo input { flex: 1; }
+    .botoes-video { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+    .botoes-video .espaco { flex: 1; }
+    .botoes-video select { padding: 4px 8px; }
+    .lista { width: 280px; flex-shrink: 0; background: var(--fundo-app); border-left: 1px solid var(--borda); overflow: auto; padding: 10px; }
+    .lista h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-suave); margin: 6px 6px 10px; }
+    .item { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; }
+    .item:hover { background: var(--superficie-2); }
+    .item.atual { background: color-mix(in srgb, var(--destaque) 22%, transparent); }
+    .item small { display: block; color: var(--texto-suave); }
+    .osd { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.6); padding: 12px 20px; border-radius: 12px; font-size: 22px; pointer-events: none; }
+    body.cheia .cabecalho, body.cheia .lista { display: none; }
+    @media (max-width: 760px) { .lista { display: none; } }
+  </style>
+</head>
+<body>
+  <header class="cabecalho">
+    <h1><span class="logo-app">🎬</span> Vorticis Video Player</h1>
+    <span class="espaco"></span>
+    <button class="botao" id="abrir">📂 Abrir</button>
+    <button class="botao" id="abrir-url">🔗 Endereço</button>
+    <button class="icone-botao" id="alt-lista" title="Lista de reprodução">☰</button>
+    <input id="in-arquivos" type="file" accept="video/*,.mkv,.avi,.srt,.vtt" multiple hidden>
+  </header>
+  <div class="palco">
+    <div class="tela" id="tela">
+      <video id="video" playsinline></video>
+      <div class="inicio" id="inicio">
+        <div><b>🎬</b><p>Arraste vídeos para cá ou clique em “Abrir”.<br><small>MP4, MKV, WebM, AVI, MOV · legendas .srt e .vtt</small></p>
+          <button class="botao primario" id="abrir2">📂 Abrir vídeos</button></div>
+      </div>
+      <div class="titulo-video" id="titulo-video" hidden></div>
+      <div class="osd" id="osd" hidden></div>
+      <div class="barra-video" id="barra-video" hidden>
+        <div class="linha-tempo"><span id="t-atual">0:00</span><input type="range" id="posicao" min="0" max="1000" value="0"><span id="t-total">0:00</span></div>
+        <div class="botoes-video">
+          <button class="icone-botao" id="anterior" title="Anterior (P)">⏮</button>
+          <button class="icone-botao" id="voltar" title="Voltar 10 s (←)">⏪</button>
+          <button class="icone-botao" id="tocar" title="Tocar/pausar (espaço)">▶</button>
+          <button class="icone-botao" id="avancar" title="Avançar 10 s (→)">⏩</button>
+          <button class="icone-botao" id="proximo" title="Próximo (N)">⏭</button>
+          <span>🔈</span><input type="range" id="volume" min="0" max="100" value="90" style="width:90px">
+          <span class="espaco"></span>
+          <select class="campo" id="velocidade" title="Velocidade">
+            <option value="0.5">0,5×</option><option value="0.75">0,75×</option><option value="1" selected>1×</option>
+            <option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2×</option>
+          </select>
+          <select class="campo" id="legendas" title="Legendas"><option value="">Sem legenda</option></select>
+          <button class="icone-botao" id="add-legenda" title="Carregar legenda (.srt/.vtt)">💬</button>
+          <button class="icone-botao" id="captura" title="Capturar quadro">📷</button>
+          <button class="icone-botao" id="pip" title="Janela flutuante">🗗</button>
+          <button class="icone-botao" id="cheia" title="Tela cheia (F)">⛶</button>
+        </div>
+        <input id="in-legenda" type="file" accept=".srt,.vtt" hidden>
+      </div>
+    </div>
+    <aside class="lista" id="lista"><h3>Lista de reprodução</h3><div id="itens"></div></aside>
+  </div>
+  <script src="../comum/app.js"></script>
+  <script src="video.js"></script>
+</body>
+</html>

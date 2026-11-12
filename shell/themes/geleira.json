@@ -1,7 +1,7 @@
 {
   "id": "geleira",
   "nome": "Geleira",
-  "descricao": "Estático e claro. Custo zero de GPU — ideal para máquinas modestas.",
+  "descricao": "Estático e claro. Custo zero de GPU.",
   "animado": false,
   "fundoEstatico": "linear-gradient(160deg, #e8f6ff 0%, #a7d8f5 45%, #4a9bd1 100%)",
   "cores": {
@@ -13,5 +13,8 @@
     "painelBorda": "rgba(10, 111, 184, 0.20)",
     "item": "rgba(10, 60, 100, 0.06)",
     "itemHover": "rgba(10, 111, 184, 0.14)"
-  }
+  },
+  "efeito": "estatico",
+  "fundoApp": "#eef7fd",
+  "claro": true
 }

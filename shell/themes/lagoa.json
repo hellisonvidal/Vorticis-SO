@@ -1,0 +1,24 @@
+{
+  "id": "lagoa",
+  "nome": "Lagoa Noturna",
+  "descricao": "Bolhas suaves em verde-azulado escuro.",
+  "efeito": "bolhas",
+  "fundoApp": "#021414",
+  "fundoEstatico": "linear-gradient(180deg, #0f4c4c 0%, #021414 100%)",
+  "cores": {
+    "destaque": "#4fe3c1",
+    "destaqueForte": "#1fbf99",
+    "texto": "#eaf6ff",
+    "textoSuave": "#a9c3d9",
+    "painel": "rgba(2, 22, 22, 0.66)",
+    "painelBorda": "rgba(255,255,255,0.14)",
+    "item": "rgba(255,255,255,0.07)",
+    "itemHover": "rgba(255,255,255,0.16)"
+  },
+  "agua": {
+    "corFundo": "#011010",
+    "corMeio": "#0f4c4c",
+    "corBrilho": "#b9fff0"
+  },
+  "animado": true
+}

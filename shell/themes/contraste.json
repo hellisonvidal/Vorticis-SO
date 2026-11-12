@@ -1,0 +1,19 @@
+{
+  "id": "contraste",
+  "nome": "Alto Contraste",
+  "descricao": "Acessibilidade: preto, branco e amarelo, sem transparências.",
+  "efeito": "estatico",
+  "fundoApp": "#000000",
+  "fundoEstatico": "#000000",
+  "cores": {
+    "destaque": "#ffd400",
+    "destaqueForte": "#ffd400",
+    "texto": "#ffffff",
+    "textoSuave": "#ffffff",
+    "painel": "rgba(0, 0, 0, 1)",
+    "painelBorda": "#ffffff",
+    "item": "rgba(255,255,255,0.10)",
+    "itemHover": "rgba(255, 212, 0, 0.35)"
+  },
+  "animado": false
+}

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Configurações
+Comment=Tela, drivers, rede, usuários e mais
+Exec=vorticis-app configuracoes
+Icon=preferences-system
+Categories=Settings;System;
+Terminal=false
+StartupWMClass=org.vorticis.Configuracoes

@@ -10,45 +10,103 @@
   <div id="papel" aria-hidden="true"></div>
 
   <main id="area">
-    <section class="relogio-grande" aria-live="polite">
+    <section class="relogio-grande" id="relogio-grande" aria-live="polite">
       <div id="hora-grande">--:--</div>
       <div id="data-grande"></div>
     </section>
   </main>
 
+  <!-- Janelas dos apps Vorticis (modo demonstração no navegador) -->
+  <div id="janelas"></div>
+
   <!-- Menu iniciar -->
   <section id="menu" class="painel" hidden aria-label="Menu Vorticis">
-    <input id="busca" type="search" placeholder="Buscar apps, arquivos e configurações…" autocomplete="off">
-    <h2>Aplicativos</h2>
+    <input id="busca" type="search" placeholder="Buscar apps e configurações…" autocomplete="off">
+    <div class="abas-menu" id="abas-menu"></div>
     <div id="grade-apps" class="grade-apps"></div>
     <footer class="menu-rodape">
       <div class="usuario">
-        <span class="avatar">H</span>
+        <span class="avatar">U</span>
         <div><strong id="nome-usuario">Usuário</strong><small id="nivel-usuario">Administrador</small></div>
       </div>
       <div class="acoes">
-        <button id="abrir-config" title="Configurações">⚙️</button>
-        <button title="Bloquear">🔒</button>
-        <button title="Desligar">⏻</button>
+        <button id="abrir-personalizar" title="Personalizar">🎨</button>
+        <button id="abrir-configuracoes" title="Configurações">⚙️</button>
+        <button title="Bloquear" data-energia="bloquear">🔒</button>
+        <button title="Desligar" data-energia="desligar">⏻</button>
       </div>
     </footer>
   </section>
 
-  <!-- Configurações rápidas -->
+  <!-- Personalização -->
   <section id="config" class="painel" hidden aria-label="Personalização">
-    <h2>Personalização</h2>
-    <h3>Tema</h3>
-    <div id="lista-temas" class="lista-temas"></div>
-    <h3>Qualidade do fundo animado</h3>
-    <div class="segmentado" id="qualidade">
-      <button data-q="auto">Automática</button>
-      <button data-q="alto">Alta (GPU)</button>
-      <button data-q="leve">Leve (CPU)</button>
-      <button data-q="estatico">Estática</button>
+    <div class="abas" role="tablist" id="abas-config">
+      <button data-aba="tema" aria-selected="true">Tema</button>
+      <button data-aba="fundo">Fundo</button>
+      <button data-aba="icones">Ícones</button>
+      <button data-aba="barra">Barra</button>
+      <button data-aba="perfil">Perfil</button>
     </div>
-    <p class="dica" id="qualidade-info"></p>
-    <h3>Perfil da barra de tarefas</h3>
-    <div id="lista-perfis" class="lista-perfis"></div>
+
+    <div class="aba" data-aba="tema">
+      <div id="lista-temas" class="lista-temas"></div>
+      <h3>Cor de destaque</h3>
+      <div class="cores" id="cores"></div>
+    </div>
+
+    <div class="aba" data-aba="fundo" hidden>
+      <h3>Qualidade da animação</h3>
+      <div class="segmentado" id="qualidade">
+        <button data-q="auto">Automática</button>
+        <button data-q="alto">Alta (GPU)</button>
+        <button data-q="leve">Leve (CPU)</button>
+        <button data-q="estatico">Estática</button>
+      </div>
+      <p class="dica" id="qualidade-info"></p>
+      <h3>Imagem própria</h3>
+      <div class="linha-opcao">
+        <button class="botao-sec" id="escolher-imagem">🖼️ Escolher imagem…</button>
+        <button class="botao-sec" id="remover-imagem">Usar o tema</button>
+        <input type="file" id="arquivo-imagem" accept="image/*" hidden>
+      </div>
+      <label class="linha-opcao"><span>Relógio grande na área de trabalho</span><input type="checkbox" id="op-relogio-grande"></label>
+    </div>
+
+    <div class="aba" data-aba="icones" hidden>
+      <h3>Estilo</h3>
+      <div class="segmentado s5" id="op-icone-estilo">
+        <button data-v="arredondado">▢ Arredondado</button><button data-v="circulo">◯ Círculo</button>
+        <button data-v="quadrado">□ Quadrado</button><button data-v="plano">✦ Sem fundo</button><button data-v="mono">◐ Monocromático</button>
+      </div>
+      <h3>Tamanho</h3>
+      <div class="segmentado s3" id="op-icone-tamanho"><button data-v="p">Pequeno</button><button data-v="m">Médio</button><button data-v="g">Grande</button></div>
+      <h3>Animação ao passar o mouse</h3>
+      <div class="segmentado s3" id="op-icone-anim"><button data-v="nenhuma">Nenhuma</button><button data-v="elevar">Elevar</button><button data-v="ampliar">Ampliar (dock)</button></div>
+      <p class="dica">Clique com o botão direito em qualquer app do menu ou da barra para fixar, desafixar e reordenar.</p>
+    </div>
+
+    <div class="aba" data-aba="barra" hidden>
+      <h3>Posição</h3>
+      <div class="segmentado s2" id="op-barra-posicao"><button data-v="inferior">⬇ Embaixo</button><button data-v="superior">⬆ Em cima</button></div>
+      <h3>Alinhamento dos ícones</h3>
+      <div class="segmentado s2" id="op-barra-alinhamento"><button data-v="centro">Centralizado</button><button data-v="esquerda">À esquerda</button></div>
+      <h3>Tamanho</h3>
+      <div class="segmentado s4" id="op-barra-tamanho"><button data-v="auto">Do perfil</button><button data-v="pequeno">Pequena</button><button data-v="medio">Média</button><button data-v="grande">Grande</button></div>
+      <h3>Nomes dos apps</h3>
+      <div class="segmentado s3" id="op-barra-rotulos"><button data-v="auto">Do perfil</button><button data-v="sim">Mostrar</button><button data-v="nao">Ocultar</button></div>
+      <label class="linha-opcao"><span>Transparência</span><input type="range" id="op-barra-opacidade" min="30" max="100"></label>
+      <label class="linha-opcao"><span>Ocultar automaticamente</span><input type="checkbox" id="op-barra-ocultar"></label>
+      <h3>Relógio</h3>
+      <div class="segmentado s2" id="op-relogio-formato"><button data-v="24">24 horas</button><button data-v="12">12 horas (AM/PM)</button></div>
+      <label class="linha-opcao"><span>Mostrar segundos</span><input type="checkbox" id="op-relogio-segundos"></label>
+      <label class="linha-opcao"><span>Mostrar data</span><input type="checkbox" id="op-relogio-data"></label>
+    </div>
+
+    <div class="aba" data-aba="perfil" hidden>
+      <p class="dica">O perfil define os apps fixados e o estilo da barra. Cada perfil guarda suas próprias personalizações.</p>
+      <div id="lista-perfis" class="lista-perfis"></div>
+      <div class="linha-opcao"><button class="botao-sec" id="restaurar-fixados">↺ Restaurar apps fixados do perfil</button></div>
+    </div>
   </section>
 
   <!-- Barra de tarefas -->
@@ -71,9 +129,11 @@
     </div>
   </nav>
 
+  <div id="ctx" class="ctx" hidden role="menu"></div>
   <div id="aviso" class="aviso" role="status" hidden></div>
 
   <script src="js/agua.js"></script>
+  <script src="js/efeitos.js"></script>
   <script src="js/shell.js"></script>
 </body>
 </html>

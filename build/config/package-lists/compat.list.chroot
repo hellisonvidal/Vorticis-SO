@@ -1,11 +1,9 @@
-# Camadas de compatibilidade (Windows, jogos, contêineres, Flatpak)
+# Camadas de compatibilidade leves na ISO. Wine (Windows), Steam, Lutris e contêineres são
+# instalados sob demanda (vorticis-compat preparar / Central de Apps) para manter a ISO < 2 GB:
+# o primeiro .exe aberto já oferece a instalação automática.
 flatpak
-distrobox
-podman
-wine
-wine64
-winetricks
-fonts-wine
 gamemode
 mangohud
-lutris
+fonts-crosextra-carlito
+fonts-crosextra-caladea
+fonts-liberation2

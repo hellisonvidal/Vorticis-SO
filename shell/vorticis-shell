@@ -50,6 +50,7 @@ def usuario_atual():
 class Superficie:
     def __init__(self, app, modo):
         self.modo = modo
+        self.posicao = "inferior"
         self.janela = Gtk.ApplicationWindow(application=app)
         LS.init_for_window(self.janela)
         LS.set_namespace(self.janela, f"vorticis-{modo}")
@@ -98,8 +99,23 @@ class Superficie:
                 print("vorticis-shell: falha ao abrir", dados.get("app"), e, file=sys.stderr)
         elif acao == "painel" and self.modo == "barra":
             aberto = bool(dados.get("aberto"))
-            LS.set_anchor(self.janela, LS.Edge.TOP, aberto)
+            # Menu aberto: a camada ocupa a tela toda (ancorada nas duas bordas) e recebe o teclado.
+            LS.set_anchor(self.janela, LS.Edge.TOP, aberto or self.posicao == "superior")
+            LS.set_anchor(self.janela, LS.Edge.BOTTOM, aberto or self.posicao == "inferior")
             LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND if aberto else LS.KeyboardMode.NONE)
+        elif acao == "barra" and self.modo == "barra":
+            self.posicao = "superior" if dados.get("posicao") == "superior" else "inferior"
+            altura = {"pequeno": 46, "medio": 56, "grande": 64}.get(dados.get("tamanho"), 56)
+            LS.set_anchor(self.janela, LS.Edge.TOP, self.posicao == "superior")
+            LS.set_anchor(self.janela, LS.Edge.BOTTOM, self.posicao == "inferior")
+            self.janela.set_default_size(-1, altura)
+            # Ocultar automaticamente: a barra não reserva espaço; as janelas usam a tela inteira.
+            LS.set_exclusive_zone(self.janela, 0 if dados.get("ocultar") else altura)
+        elif acao == "energia-sessao":
+            comandos = {"bloquear": ["swaylock", "-f", "-c", "03214a"], "desligar": ["systemctl", "poweroff"],
+                        "reiniciar": ["systemctl", "reboot"], "sair": ["labwc", "--exit"]}
+            if dados.get("acao") in comandos:
+                subprocess.Popen(comandos[dados["acao"]], start_new_session=True)
         elif acao == "preferencia":
             chamada = f"window.vorticisPreferencia({json.dumps(dados.get('chave'))}, {json.dumps(dados.get('valor'))})"
             for outra in SUPERFICIES:

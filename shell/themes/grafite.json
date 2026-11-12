@@ -1,0 +1,19 @@
+{
+  "id": "grafite",
+  "nome": "Grafite",
+  "descricao": "Minimalista escuro e estático, sem distrações.",
+  "efeito": "estatico",
+  "fundoApp": "#121417",
+  "fundoEstatico": "radial-gradient(ellipse at 50% 0%, #2c3138 0%, #15181c 60%, #0d0f12 100%)",
+  "cores": {
+    "destaque": "#7cc4ff",
+    "destaqueForte": "#4ea8f5",
+    "texto": "#eceff3",
+    "textoSuave": "#9aa3ad",
+    "painel": "rgba(24, 27, 31, 0.80)",
+    "painelBorda": "rgba(255,255,255,0.10)",
+    "item": "rgba(255,255,255,0.06)",
+    "itemHover": "rgba(255,255,255,0.13)"
+  },
+  "animado": false
+}

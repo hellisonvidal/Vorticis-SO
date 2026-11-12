@@ -1,4 +1,4 @@
+# Firefox vem na ISO; Chromium, Chrome, Brave, Edge, Opera e Vivaldi
+# são instalados pela Central de Apps / vorticis-navegadores (mantém a ISO < 2 GB).
 firefox-esr
 firefox-esr-l10n-pt-br
-chromium
-chromium-l10n

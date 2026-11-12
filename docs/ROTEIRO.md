@@ -1,27 +1,25 @@
 # Roteiro
 
-## v0.1 "Nascente" — fundação (este commit)
-- [x] Estrutura do projeto e documentação
-- [x] Protótipo do shell: água interativa, 3 níveis de qualidade, barra adaptável, temas
-- [x] Configuração live-build da ISO
-- [x] Ferramentas: compat, drivers, recursos, usuários, navegadores
-- [x] Segurança de rede padrão
-- [x] Instalador Calamares + instalação a partir de Linux/Windows ativo
+## v0.1 "Nascente" — fundação ✔
+- [x] Estrutura, documentação, shell com água interativa, ferramentas básicas, segurança, instaladores
 
-## v0.2 "Correnteza" — primeira ISO inicializável
-- [ ] Gerar ISO em CI (GitHub Actions, container Debian privilegiado)
-- [ ] Testar boot em QEMU (UEFI e BIOS) automaticamente
-- [ ] Empacotar o shell como `.deb` (`vorticis-shell`) com janela WebKitGTK + layer-shell
-- [ ] Tema GRUB e Plymouth "gota d'água"
-- [ ] Tela de login greetd com o mesmo tema
+## v0.2 "Correnteza" — primeiro instalador ✔
+- [x] ISO gerada (Debian 13 + live-build) e publicada nas releases pelo CI
+- [x] 12 temas (água, bolhas, aurora, estáticos) e personalização de ícones e barra
+- [x] Vorticis Music e Vorticis Video Player
+- [x] Central de Apps (gerenciador de aplicativos) e ferramentas de sistema
+- [x] Receitas Windows, VM Windows integrada, opções de Office, anti-cheat
+- [x] Mais drivers e suporte a todas as resoluções (vorticis-tela)
+- [x] macOS retirado: foco em Linux, Windows e Android
 
 ## v0.3 "Maré alta" — experiência
-- [ ] Central de Configurações gráfica (temas, usuários, drivers, rede)
-- [ ] Editor de temas e loja de temas animados
-- [ ] Gerenciador de janelas na barra (integração wlr-foreign-toplevel)
-- [ ] Notificações e central de controle rápido
+- [ ] Teste automático de boot da ISO em QEMU (UEFI e BIOS) no CI
+- [ ] Tela de login gráfica e tema Plymouth "gota d'água"
+- [ ] Lista de janelas abertas na barra no SO real (wlr-foreign-toplevel)
+- [ ] Notificações e central de controle rápido (Wi-Fi, volume, brilho)
+- [ ] Editor de temas e loja de temas da comunidade
 
 ## v1.0 "Oceano"
-- [ ] Atualizações atômicas com rollback (snapshots Btrfs + snapper)
-- [ ] Assinatura de pacotes e Secure Boot com chave própria
+- [ ] Atualizações atômicas com rollback automático (Btrfs + snapper)
+- [ ] Repositório e chave de assinatura próprios; Secure Boot com chave Vorticis
 - [ ] Tradução para inglês e espanhol

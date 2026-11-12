@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Instalar com Vorticis
+Comment=Instala programas de Windows, Android e Linux
+Exec=foot -e bash -c "vorticis-compat instalar %f; read -r -p \"Pressione Enter para fechar\" _"
+Icon=system-software-install
+Categories=System;
+Terminal=false
+StartupWMClass=vorticis-compat
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msi;application/vnd.android.package-archive;application/vnd.debian.binary-package;application/x-rpm;application/vnd.appimage;application/vnd.flatpak.ref;

@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""vorticis-sistema — informações e estado ao vivo do sistema (usado pelo Vorticis Monitor).
+
+Uso:
+  vorticis-sistema info [--json]       versão, kernel, CPU, GPU, memória, discos, tempo ligado
+  vorticis-sistema agora [--json]      uso de CPU/memória/disco/rede/temperatura + processos
+  vorticis-sistema encerrar PID [--forcar]
+"""
+import argparse
+import json
+import os
+import platform
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def ler(p, padrao=""):
+    try:
+        return Path(p).read_text().strip()
+    except OSError:
+        return padrao
+
+
+def cpu_tempos():
+    v = [int(x) for x in ler("/proc/stat").splitlines()[0].split()[1:]]
+    ocioso = v[3] + (v[4] if len(v) > 4 else 0)
+    return sum(v), ocioso
+
+
+def meminfo():
+    d = {}
+    for linha in ler("/proc/meminfo").splitlines():
+        k, val = linha.split(":", 1)
+        d[k] = int(val.split()[0]) * 1024
+    return d
+
+
+def rede_bytes():
+    rx = tx = 0
+    for linha in ler("/proc/net/dev").splitlines()[2:]:
+        nome, dados = linha.split(":", 1)
+        if nome.strip() == "lo":
+            continue
+        c = dados.split()
+        rx += int(c[0]); tx += int(c[8])
+    return rx, tx
+
+
+def temperatura():
+    melhores = []
+    for z in Path("/sys/class/hwmon").glob("hwmon*"):
+        nome = ler(z / "name")
+        for t in z.glob("temp*_input"):
+            try:
+                melhores.append((nome, int(ler(t, "0")) / 1000))
+            except ValueError:
+                pass
+    prefer = [x for x in melhores if x[0] in ("coretemp", "k10temp", "zenpower", "cpu_thermal", "acpitz")]
+    lista = prefer or melhores
+    return max((x[1] for x in lista), default=None)
+
+
+def processos():
+    total_mem = meminfo().get("MemTotal", 1)
+    hz = os.sysconf("SC_CLK_TCK")
+    lista = []
+    for p in Path("/proc").iterdir():
+        if not p.name.isdigit():
+            continue
+        try:
+            stat = (p / "stat").read_text()
+            nome = stat[stat.index("(") + 1:stat.rindex(")")]
+            campos = stat[stat.rindex(")") + 2:].split()
+            cpu_t = (int(campos[11]) + int(campos[12])) / hz
+            rss = int(campos[21]) * os.sysconf("SC_PAGE_SIZE")
+            uid = (p / "status").read_text().split("Uid:")[1].split()[0]
+            lista.append({"pid": int(p.name), "nome": nome, "cpu_t": cpu_t, "mem": rss,
+                          "mem_pct": round(rss / total_mem * 100, 1), "uid": int(uid)})
+        except (OSError, IndexError, ValueError):
+            continue
+    return lista
+
+
+def gpu():
+    nomes = []
+    if shutil.which("lspci"):
+        for linha in subprocess.run(["lspci"], capture_output=True, text=True).stdout.splitlines():
+            if any(k in linha for k in ("VGA", "3D controller", "Display controller")):
+                nomes.append(linha.split(": ", 1)[-1])
+    return nomes
+
+
+def cmd_info(a):
+    os_rel = dict(l.split("=", 1) for l in ler("/etc/os-release").splitlines() if "=" in l)
+    cpu = next((l.split(":", 1)[1].strip() for l in ler("/proc/cpuinfo").splitlines() if l.startswith("model name")), platform.processor())
+    m = meminfo()
+    discos = []
+    vistos = set()
+    for linha in ler("/proc/mounts").splitlines():
+        dev, ponto, tipo = linha.split()[:3]
+        if dev.startswith("/dev/") and dev not in vistos and tipo not in ("squashfs", "iso9660", "vfat"):
+            vistos.add(dev)
+            u = shutil.disk_usage(ponto)
+            if u.total > 1024 ** 3:
+                discos.append({"ponto": ponto, "tipo": tipo, "total": u.total, "usado": u.used})
+    versao_v = ler("/etc/vorticis/versao", "0.2")
+    info = {
+        "sistema": f"Vorticis SO {versao_v}", "base": os_rel.get("PRETTY_NAME", "").strip('"'),
+        "kernel": platform.release(), "cpu": cpu, "nucleos": os.cpu_count(), "gpu": gpu(),
+        "memoria": m.get("MemTotal", 0), "discos": discos,
+        "ligado_ha": int(float(ler("/proc/uptime", "0 0").split()[0])),
+        "sessao": os.environ.get("XDG_SESSION_TYPE", ""), "host": platform.node(),
+    }
+    if a.json:
+        print(json.dumps(info, ensure_ascii=False))
+        return
+    def gb(b): return f"{b / 1024 ** 3:.1f} GB"
+    print(f"{info['sistema']}  (base {info['base']})\nKernel: {info['kernel']}\nCPU: {cpu} ({info['nucleos']} núcleos)")
+    for g in info["gpu"]:
+        print(f"GPU: {g}")
+    print(f"Memória: {gb(info['memoria'])}")
+    for d in discos:
+        print(f"Disco {d['ponto']}: {gb(d['usado'])} de {gb(d['total'])} ({d['tipo']})")
+    h = info["ligado_ha"]
+    print(f"Ligado há: {h // 86400}d {h % 86400 // 3600}h {h % 3600 // 60}min")
+
+
+def cmd_agora(a):
+    t1, o1 = cpu_tempos(); r1, x1 = rede_bytes(); p1 = {p["pid"]: p["cpu_t"] for p in processos()}
+    time.sleep(0.5)
+    t2, o2 = cpu_tempos(); r2, x2 = rede_bytes(); procs = processos()
+    cpu = 100 * (1 - (o2 - o1) / max(1, t2 - t1))
+    for p in procs:
+        p["cpu"] = round(max(0.0, (p["cpu_t"] - p1.get(p["pid"], p["cpu_t"])) / 0.5 * 100), 1)
+        del p["cpu_t"]
+    m = meminfo()
+    u = shutil.disk_usage("/")
+    dados = {
+        "cpu": round(cpu, 1), "memoria": {"total": m["MemTotal"], "usada": m["MemTotal"] - m["MemAvailable"]},
+        "swap": {"total": m.get("SwapTotal", 0), "usada": m.get("SwapTotal", 0) - m.get("SwapFree", 0)},
+        "disco": {"total": u.total, "usado": u.used},
+        "rede": {"rx": (r2 - r1) * 2, "tx": (x2 - x1) * 2}, "temperatura": temperatura(),
+        "carga": ler("/proc/loadavg").split()[:3],
+        "processos": sorted(procs, key=lambda p: (p["cpu"], p["mem"]), reverse=True)[:40],
+    }
+    if a.json:
+        print(json.dumps(dados, ensure_ascii=False))
+    else:
+        print(f"CPU {dados['cpu']}%  ·  memória {dados['memoria']['usada'] / 1024 ** 3:.1f} GB  ·  temp {dados['temperatura']} °C")
+        for p in dados["processos"][:10]:
+            print(f"  {p['pid']:>7} {p['cpu']:>5}% {p['mem'] / 1024 ** 2:>8.0f} MB  {p['nome']}")
+
+
+def cmd_encerrar(a):
+    try:
+        st = os.stat(f"/proc/{a.pid}")
+    except FileNotFoundError:
+        sys.exit("Processo não existe mais.")
+    if st.st_uid != os.getuid() and os.geteuid() != 0:
+        sys.exit("Esse processo pertence a outro usuário (é preciso ser administrador).")
+    os.kill(a.pid, signal.SIGKILL if a.forcar else signal.SIGTERM)
+    print(f"Sinal enviado ao processo {a.pid}.")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-sistema", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for n, f in (("info", cmd_info), ("agora", cmd_agora)):
+        p = sub.add_parser(n); p.add_argument("--json", action="store_true"); p.set_defaults(f=f)
+    p = sub.add_parser("encerrar"); p.add_argument("pid", type=int); p.add_argument("--forcar", action="store_true"); p.set_defaults(f=cmd_encerrar)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

@@ -29,7 +29,7 @@
 param(
   [int]$EspacoGB = 60,
   [string]$Iso,
-  [string]$Url = "https://github.com/hellisonvidal/Vorticis-SO/releases/download/v0.1/vorticis-0.1-amd64.iso",
+  [string]$Url = "https://github.com/hellisonvidal/Vorticis-SO/releases/download/v0.2/vorticis-0.2-amd64.iso",
   [switch]$Simular
 )
 

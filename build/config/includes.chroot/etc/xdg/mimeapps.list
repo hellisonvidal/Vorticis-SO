@@ -1,0 +1,24 @@
+[Default Applications]
+audio/mpeg=vorticis-music.desktop
+audio/flac=vorticis-music.desktop
+audio/ogg=vorticis-music.desktop
+audio/x-vorbis+ogg=vorticis-music.desktop
+audio/opus=vorticis-music.desktop
+audio/mp4=vorticis-music.desktop
+audio/aac=vorticis-music.desktop
+audio/x-wav=vorticis-music.desktop
+video/mp4=vorticis-video.desktop
+video/x-matroska=vorticis-video.desktop
+video/webm=vorticis-video.desktop
+video/x-msvideo=vorticis-video.desktop
+video/quicktime=vorticis-video.desktop
+video/mpeg=vorticis-video.desktop
+application/x-ms-dos-executable=vorticis-instalar-programa.desktop
+application/x-msdownload=vorticis-instalar-programa.desktop
+application/x-msi=vorticis-instalar-programa.desktop
+application/vnd.android.package-archive=vorticis-instalar-programa.desktop
+application/vnd.debian.binary-package=vorticis-instalar-programa.desktop
+application/vnd.appimage=vorticis-instalar-programa.desktop
+x-scheme-handler/http=firefox-esr.desktop
+x-scheme-handler/https=firefox-esr.desktop
+text/html=firefox-esr.desktop

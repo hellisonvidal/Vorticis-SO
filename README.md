@@ -1,63 +1,68 @@
 # Vorticis SO
 
 Sistema operacional **híbrido, leve e bonito**, construído sobre o kernel Linux (base Debian 13 "trixie"),
-com camadas de compatibilidade para rodar software de **Windows, Linux, Android e (parcialmente) macOS**.
+que roda programas de **Linux, Windows e Android**.
 
 > Tema inicial **"Maré"**: tons de azul e um plano de fundo de água que ondula quando o mouse passa por cima —
-> com modo de economia (Canvas 2D / imagem estática) para máquinas sem GPU dedicada.
+> com modo de economia (CPU / estático) para máquinas sem GPU dedicada. Outros 11 temas: bolhas, aurora, recife,
+> crepúsculo, neon, grafite, alto contraste…
 
 ![Tema Maré: água interativa e barra de tarefas](docs/captura-mare.png)
 
-![Personalização: temas, qualidade do fundo e perfis da barra](docs/captura-personalizacao.png)
+| | |
+|---|---|
+| ![Personalização com 12 temas](docs/captura-temas.png) | ![Central de Apps](docs/captura-central.png) |
+| ![Vorticis Music](docs/captura-music.png) | ![Barra no topo, tema Bolhas](docs/captura-bolhas.png) |
 
-## Por que sobre Linux?
+## Baixar e instalar
 
-Escrever um kernel do zero levaria anos só para alcançar suporte a drivers de rede, vídeo e USB.
-Usando o kernel Linux + Debian, o Vorticis herda suporte a milhares de dispositivos, atualizações de
-segurança e um ecossistema enorme — e concentra o esforço no que o torna único: a experiência,
-a compatibilidade híbrida e as ferramentas inteligentes.
+Versões prontas ficam em **[Releases](https://github.com/hellisonvidal/Vorticis-SO/releases)** —
+ISO para pen-drive, instalador para Windows e instalador para Linux. Veja [`installer/`](installer/).
 
-## O que já existe neste repositório
+## O que vem no Vorticis
 
-| Área | Onde | Status |
+| Área | Onde | O que faz |
 |---|---|---|
-| Build da ISO (live USB) | [`build/`](build/) | Configuração `live-build` + pacotes + hooks |
-| Shell / área de trabalho | [`shell/`](shell/) | Protótipo funcional: água interativa (WebGL + fallback), barra de tarefas adaptável ao perfil, motor de temas |
-| Temas | [`shell/themes/`](shell/themes/) | `mare` (padrão, animado), `abismo` (escuro), `geleira` (estático, leve) |
-| Compatibilidade de apps | [`tools/vorticis-compat`](tools/vorticis-compat) | Instala `.exe/.msi`, `.apk`, `.deb`, `.rpm`, `.AppImage`, `.flatpakref`, `.dmg` pela camada certa |
-| Caçador de drivers | [`tools/vorticis-drivers`](tools/vorticis-drivers) | Detecta hardware (PCI/USB/modalias), sugere e instala drivers e firmware (fwupd) |
-| Gerência de recursos | [`tools/vorticis-recursos`](tools/vorticis-recursos) | zram, OOM inteligente, perfis de energia, limpeza e TRIM |
-| Usuários e níveis de acesso | [`tools/vorticis-usuarios`](tools/vorticis-usuarios) | Administrador, Padrão, Convidado, Infantil (grupos + polkit) |
-| Segurança de rede | [`security/`](security/) + [`tools/vorticis-rede`](tools/vorticis-rede) | nftables (nega entrada por padrão), DNS-over-TLS, MAC aleatório, AppArmor, filtro DNS familiar |
-| Navegadores | [`tools/vorticis-navegadores`](tools/vorticis-navegadores) | Firefox, Chromium, Chrome, Brave, Edge, Opera, Vivaldi + navegador padrão |
-| Instalador | [`installer/`](installer/) | Calamares (pen-drive) + instalação a partir de sistema ativo (Linux e Windows) |
+| Área de trabalho | [`shell/`](shell/) | Água/bolhas/aurora interativas, 12 temas, cor de destaque, imagem própria, 5 estilos de ícones, barra em cima/embaixo, centralizada/à esquerda, transparência, ocultar, relógio 12/24 h, fixar e reordenar apps, perfis (Básico, Trabalho, Gamer, Dev, Infantil) |
+| Vorticis Music | [`shell/apps/musica`](shell/apps/musica) | Biblioteca, capas e tags ID3, artistas/álbuns, favoritos, fila, aleatório/repetir, equalizador de 5 bandas, visualizador, teclas de mídia |
+| Vorticis Video Player | [`shell/apps/video`](shell/apps/video) | Lista, legendas .srt/.vtt, velocidade, retomar de onde parou, captura de quadro, janela flutuante, atalhos |
+| Central de Apps | [`shell/apps/central`](shell/apps/central) + [`tools/vorticis-apps`](tools/vorticis-apps) | Gerenciador de aplicativos: 60+ apps selecionados, Flathub, Debian, Android e Windows; instalados e atualizações (sistema, apps, firmware) |
+| Ferramentas de sistema | [`shell/apps`](shell/apps) | Configurações, Monitor, Notas, Calculadora; backup e pontos de restauração |
+| Windows | [`tools/vorticis-compat`](tools/vorticis-compat) | Wine com prefixo por programa e receitas automáticas; VM Windows integrada para Office 365/AutoCAD/Adobe; 5 caminhos para Office |
+| Jogos e anti-cheat | [`tools/vorticis-jogos`](tools/vorticis-jogos) | Consulta se o anti-cheat de cada jogo funciona; Steam/Proton, EAC/BattlEye, Proton-GE |
+| Android | [`tools/vorticis-compat`](tools/vorticis-compat) | Waydroid: apps Android nativos, `.apk` com dois cliques |
+| Drivers | [`tools/vorticis-drivers`](tools/vorticis-drivers) | GPUs NVIDIA/AMD/Intel e híbridas, Wi-Fi, Bluetooth, áudio, Thunderbolt, digital, controles, Wacom, impressoras/scanners, firmware/BIOS, kernel novo para hardware recente |
+| Telas | [`tools/vorticis-tela`](tools/vorticis-tela) | Todas as resoluções e taxas do monitor, escala automática (HiDPI), modos personalizados, vários monitores |
+| Recursos | [`tools/vorticis-recursos`](tools/vorticis-recursos) | zram, proteção contra travamentos, perfis de energia, limpeza, TRIM |
+| Usuários | [`tools/vorticis-usuarios`](tools/vorticis-usuarios) | Administrador, Padrão, Convidado, Infantil (horário e filtro de sites) |
+| Rede e segurança | [`security/`](security/) + [`tools/vorticis-rede`](tools/vorticis-rede) | Firewall que bloqueia entradas, DNS criptografado, MAC aleatório, AppArmor |
+| Navegadores | [`tools/vorticis-navegadores`](tools/vorticis-navegadores) | Firefox, Chromium, Chrome, Brave, Edge, Opera, Vivaldi + padrão e aceleração por GPU |
+| Instaladores | [`installer/`](installer/) | Pen-drive (Calamares), a partir do Windows e a partir de um Linux em uso |
 
-Documentação: [Arquitetura](docs/ARQUITETURA.md) · [Compatibilidade](docs/COMPATIBILIDADE.md) · [Roteiro](docs/ROTEIRO.md)
+Documentação: [Arquitetura](docs/ARQUITETURA.md) · [Compatibilidade](docs/COMPATIBILIDADE.md) · [Roteiro](docs/ROTEIRO.md) · [Notas da versão](docs/NOTAS-DA-VERSAO.md)
 
 ## Experimentar o visual agora (sem instalar nada)
 
 ```bash
 cd shell && python3 -m http.server 8080
-# abra http://localhost:8080 no navegador
+# abra http://localhost:8080 — os apps Vorticis abrem em janelas de demonstração
 ```
 
 ## Gerar a ISO
 
-Em uma máquina Debian/Ubuntu (ou container Debian) com acesso root:
+Em Debian 13 (ou contêiner `debian:trixie --privileged`), como root:
 
 ```bash
-sudo apt install live-build
-cd build && sudo ./build.sh
-# resultado: build/vorticis-<versão>-amd64.iso
+apt install live-build
+cd build && ./build.sh          # resultado: build/vorticis-0.2-amd64.iso
 ```
 
-Gravar no pen-drive: `sudo dd if=vorticis-*.iso of=/dev/sdX bs=4M status=progress oflag=sync`
-(ou use Ventoy, balenaEtcher, Rufus em modo DD).
+Ou crie uma tag `vX.Y` no GitHub: o CI gera a ISO e publica a release automaticamente.
 
-## Requisitos mínimos (meta)
+## Requisitos mínimos
 
-- CPU x86-64 de 2 núcleos, 2 GB de RAM (4 GB recomendados para Android/Windows apps)
-- 20 GB de disco
+- CPU x86-64 de 2 núcleos, 2 GB de RAM (4 GB recomendados para Android/Windows)
+- 20 GB de disco · UEFI ou BIOS
 - Qualquer GPU com OpenGL 2.1 / GLES 2 — sem ela, o tema cai automaticamente para o modo leve
 
 ## Licença

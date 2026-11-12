@@ -1,7 +1,7 @@
 {
   "id": "abismo",
   "nome": "Abismo",
-  "descricao": "Escuro e profundo, ideal para a noite. Água lenta, sem gotas ambientes.",
+  "descricao": "Escuro e profundo, ideal para a noite. Água lenta, sem gotas.",
   "animado": true,
   "fundoEstatico": "linear-gradient(180deg, #0a2540 0%, #010812 100%)",
   "cores": {
@@ -21,5 +21,7 @@
     "causticas": 0.18,
     "amortecimento": 0.99,
     "gotasAmbiente": false
-  }
+  },
+  "efeito": "agua",
+  "fundoApp": "#020b16"
 }

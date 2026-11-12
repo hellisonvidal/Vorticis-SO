@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""vorticis-compat — instala qualquer programa pela camada de compatibilidade certa.
+"""vorticis-compat — instala programas de Windows, Android e Linux pela camada certa.
 
 Uso:
-  vorticis-compat instalar ARQUIVO [--nome NOME] [--simular]
+  vorticis-compat instalar ARQUIVO [--nome NOME] [--receita ID] [--simular]
   vorticis-compat detectar ARQUIVO
-  vorticis-compat preparar {windows,android,macos,jogos,rpm,todos} [--simular]
+  vorticis-compat receitas                       lista ajustes automáticos para programas Windows
+  vorticis-compat preparar {windows,android,jogos,rpm,fontes,vm,todos} [--simular]
+  vorticis-compat office {libreoffice,onlyoffice,web,wine,vm} [--simular]
+  vorticis-compat windows-vm {criar,iniciar,app,parar} [PROGRAMA] [--simular]
   vorticis-compat status
 
-Camadas: Linux nativo (apt/flatpak/AppImage), Windows (Wine/Proton), Android
-(Waydroid), macOS (Darling, limitado), RPM (Distrobox Fedora).
+Camadas:
+  Linux    nativo (apt, Flatpak, AppImage) e RPM via Distrobox
+  Windows  Wine com prefixo isolado por programa + receitas (winetricks, DXVK/VKD3D);
+           para o que o Wine não roda: VM Windows (KVM) com janelas integradas (RemoteApp)
+  Android  Waydroid (contêiner, mesmo kernel — sem emulação)
 """
 import argparse
+import json
 import os
 import re
 import shutil
@@ -21,38 +28,37 @@ from pathlib import Path
 HOME = Path.home()
 DADOS = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
 PREFIXOS_WINE = DADOS / "vorticis/wine"
+VM_DIR = DADOS / "vorticis/windows-vm"
 ATALHOS = DADOS / "applications"
 APPIMAGES = HOME / "Aplicativos"
+RECEITAS = [Path(__file__).resolve().parent / "compat/receitas.json", Path("/usr/share/vorticis/compat/receitas.json")]
 
 ASSINATURAS = [
     (b"MZ", "windows"),
     (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "windows"),  # .msi (OLE2)
     (b"!<arch>\ndebian", "deb"),
     (b"\xed\xab\xee\xdb", "rpm"),
-    (b"\x7fELF", "elf"),
-    (b"koly", "macos"),
 ]
-
 EXTENSOES = {
-    ".exe": "windows", ".msi": "windows", ".bat": "windows",
+    ".exe": "windows", ".msi": "windows", ".bat": "windows", ".lnk": "windows",
     ".apk": "android", ".xapk": "android", ".apks": "android",
-    ".deb": "deb", ".rpm": "rpm",
-    ".appimage": "appimage",
+    ".deb": "deb", ".rpm": "rpm", ".appimage": "appimage",
     ".flatpakref": "flatpak", ".flatpak": "flatpak",
-    ".dmg": "macos", ".pkg": "macos",
     ".sh": "script", ".run": "script",
 }
 
 PACOTES_CAMADA = {
-    "windows": ["wine", "wine64", "wine32:i386", "winetricks", "fonts-wine"],
+    "windows": ["wine", "wine64", "wine32:i386", "winetricks", "winbind", "cabextract", "fonts-wine",
+                "mesa-vulkan-drivers:i386", "libvulkan1:i386"],
     "android": ["waydroid"],
-    "macos":   ["darling"],
-    "jogos":   ["steam-installer", "gamemode", "mangohud", "lutris"],
+    "jogos":   ["steam-installer", "steam-devices", "gamemode", "mangohud", "lutris"],
     "rpm":     ["distrobox", "podman"],
+    "fontes":  ["ttf-mscorefonts-installer", "fonts-crosextra-carlito", "fonts-crosextra-caladea", "fonts-liberation2"],
+    "vm":      ["quickemu", "qemu-system-x86", "ovmf", "swtpm", "freerdp3-wayland", "spice-client-gtk"],
 }
 FLATPAKS_CAMADA = {
     "windows": ["com.usebottles.bottles"],
-    "jogos":   ["com.heroicgameslauncher.hgl"],
+    "jogos":   ["com.heroicgameslauncher.hgl", "net.davidotek.pupgui2"],  # ProtonUp-Qt: Proton-GE
 }
 
 
@@ -60,13 +66,14 @@ class Executor:
     def __init__(self, simular):
         self.simular = simular
 
-    def rodar(self, cmd, root=False, checar=True):
+    def rodar(self, cmd, root=False, checar=True, env=None):
         if root and os.geteuid() != 0:
-            cmd = ["pkexec"] + cmd if shutil.which("pkexec") else ["sudo"] + cmd
-        print(("[simulação] " if self.simular else "→ ") + " ".join(map(str, cmd)))
+            cmd = (["pkexec"] if shutil.which("pkexec") else ["sudo"]) + cmd
+        pref = " ".join(f"{k}={v}" for k, v in (env or {}).items())
+        print(("[simulação] " if self.simular else "→ ") + (pref + " " if pref else "") + " ".join(map(str, cmd)))
         if self.simular:
             return 0
-        return subprocess.run(list(map(str, cmd)), check=checar).returncode
+        return subprocess.run(list(map(str, cmd)), check=checar, env={**os.environ, **(env or {})}).returncode
 
     def escrever(self, caminho, conteudo, modo=0o644):
         print(("[simulação] " if self.simular else "→ ") + f"escrever {caminho}")
@@ -77,75 +84,167 @@ class Executor:
         caminho.chmod(modo)
 
 
+def carregar_receitas():
+    for r in RECEITAS:
+        if r.exists():
+            return json.loads(r.read_text())
+    return {"padrao": {"arquitetura": "win64", "versao_windows": "win10", "verbos": []}, "receitas": [], "sem_suporte_wine": []}
+
+
+def escolher_receita(nome_arquivo, forcada=None):
+    dados = carregar_receitas()
+    if forcada:
+        for r in dados["receitas"]:
+            if r["id"] == forcada:
+                return r, None
+        sys.exit(f"Receita '{forcada}' não existe. Veja: vorticis-compat receitas")
+    for s in dados.get("sem_suporte_wine", []):
+        if any(re.search(p, nome_arquivo, re.I) for p in s["padroes"]):
+            return None, s
+    for r in dados["receitas"]:
+        if any(re.search(p, nome_arquivo, re.I) for p in r["padroes"]):
+            return r, None
+    return {"id": "padrao", "nome": "Programa Windows genérico", **dados["padrao"]}, None
+
+
 def detectar(arquivo: Path) -> str:
     ext = arquivo.suffix.lower()
     try:
         with open(arquivo, "rb") as f:
-            cabecalho = f.read(16)
-            f.seek(0, os.SEEK_END)
-            if f.tell() >= 512:
-                f.seek(-512, os.SEEK_END)
-                rodape = f.read(4)
-            else:
-                rodape = b""
+            cab = f.read(16)
     except OSError:
-        cabecalho = rodape = b""
-    if ext in (".apk", ".xapk", ".apks") and cabecalho.startswith(b"PK"):
+        cab = b""
+    if ext in (".apk", ".xapk", ".apks") and cab.startswith(b"PK"):
         return "android"
-    if rodape == b"koly":
-        return "macos"
-    if ext == ".appimage" or (cabecalho.startswith(b"\x7fELF") and cabecalho[8:10] == b"AI"):
+    if ext == ".appimage" or (cab.startswith(b"\x7fELF") and cab[8:10] == b"AI"):
         return "appimage"
     for magia, tipo in ASSINATURAS:
-        if cabecalho.startswith(magia) and tipo != "elf":
+        if cab.startswith(magia):
             return tipo
-    return EXTENSOES.get(ext, "elf" if cabecalho.startswith(b"\x7fELF") else "desconhecido")
+    return EXTENSOES.get(ext, "elf" if cab.startswith(b"\x7fELF") else "desconhecido")
 
 
-def nome_seguro(texto: str) -> str:
-    base = re.sub(r"[^A-Za-z0-9._-]+", "-", texto).strip("-").lower()
-    return base or "app"
+def nome_seguro(texto):
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", texto).strip("-").lower() or "app"
 
 
-def criar_atalho(ex: Executor, ident, nome, exec_cmd, icone="application-x-executable", categoria="Utility"):
-    conteudo = (
-        "[Desktop Entry]\nType=Application\n"
-        f"Name={nome}\nExec={exec_cmd}\nIcon={icone}\nCategories={categoria};\n"
-        "X-Vorticis-Instalado=true\n"
-    )
-    ex.escrever(ATALHOS / f"vorticis-{ident}.desktop", conteudo)
+def criar_atalho(ex, ident, nome, exec_cmd, icone="application-x-executable", categoria="Utility"):
+    ex.escrever(ATALHOS / f"vorticis-{ident}.desktop",
+                "[Desktop Entry]\nType=Application\n"
+                f"Name={nome}\nExec={exec_cmd}\nIcon={icone}\nCategories={categoria};\nX-Vorticis-Instalado=true\n")
 
 
-def instalar_windows(ex, arq, nome):
+# ------------------------------------------------------------------ Windows
+def instalar_windows(ex, arq, nome, receita_forcada=None):
+    receita, sem_suporte = escolher_receita(arq.name, receita_forcada)
+    if sem_suporte:
+        print(f"⚠ {sem_suporte['motivo']}\n  {sem_suporte['alternativa']}")
+        if not ex.simular and input("Tentar mesmo assim no Wine? [s/N] ").strip().lower() not in ("s", "sim"):
+            return
+        receita = {"id": "padrao", "nome": "Programa Windows genérico", **carregar_receitas()["padrao"]}
     if not shutil.which("wine") and not ex.simular:
-        sys.exit("Wine não está instalado. Rode: vorticis-compat preparar windows")
+        preparar_sob_demanda("windows", "Wine (compatibilidade com Windows, ~700 MB)")
+
     ident = nome_seguro(nome)
     prefixo = PREFIXOS_WINE / ident
-    env = f"WINEPREFIX={prefixo}"
-    print(f"Prefixo Wine isolado para '{nome}': {prefixo}")
+    env = {"WINEPREFIX": str(prefixo), "WINEARCH": receita.get("arquitetura", "win64"), "WINEDEBUG": "-all"}
+    print(f"Receita: {receita['nome']}  ·  prefixo isolado: {prefixo}")
+    if receita.get("aviso"):
+        print("ℹ " + receita["aviso"])
     if not ex.simular:
-        prefixo.mkdir(parents=True, exist_ok=True)
-        os.environ["WINEPREFIX"] = str(prefixo)
-    ex.rodar(["wineboot", "--init"], checar=False)
+        prefixo.parent.mkdir(parents=True, exist_ok=True)
+    ex.rodar(["wineboot", "--init"], checar=False, env=env)
+    ex.rodar(["winetricks", "-q", receita.get("versao_windows", "win10")], checar=False, env=env)
+    verbos = receita.get("verbos", [])
+    if verbos:
+        ex.rodar(["winetricks", "-q", "--unattended"] + verbos, checar=False, env=env)
+    for dll in receita.get("dlls_nativas", []):
+        ex.rodar(["wine", "reg", "add", r"HKCU\Software\Wine\DllOverrides", "/v", dll, "/d", "native,builtin", "/f"], checar=False, env=env)
+
     if arq.suffix.lower() == ".msi":
-        ex.rodar(["wine", "msiexec", "/i", arq])
+        ex.rodar(["wine", "msiexec", "/i", arq], env=env)
     else:
-        ex.rodar(["wine", arq])
-    # Procura o executável principal instalado para criar o atalho.
+        ex.rodar(["wine", arq], env=env, checar=False)
+
     alvo = None
     if not ex.simular:
-        candidatos = list((prefixo / "drive_c").glob("Program Files*/**/*.exe"))
-        candidatos = [c for c in candidatos if not re.search(r"unins|setup|update|crash", c.name, re.I)]
+        candidatos = [c for c in (prefixo / "drive_c").glob("Program Files*/**/*.exe")
+                      if not re.search(r"unins|setup|update|crash|helper|repair", c.name, re.I)]
         if candidatos:
             alvo = max(candidatos, key=lambda c: c.stat().st_size)
-    exec_cmd = f'env {env} wine "{alvo}"' if alvo else f'env {env} wine explorer'
+    vars_env = " ".join(f"{k}={v}" for k, v in env.items())
+    exec_cmd = f'env {vars_env} wine "{alvo}"' if alvo else f"env {vars_env} wine explorer"
     criar_atalho(ex, ident, nome, exec_cmd, "wine", "Wine")
-    print("Dica: jogos rodam melhor pela Steam (Proton) ou Heroic/Lutris (DXVK).")
+    # Registro para a Central de Apps / desinstalação
+    ex.escrever(prefixo / "vorticis.json",
+                json.dumps({"nome": nome, "receita": receita["id"], "executavel": str(alvo) if alvo else None}, ensure_ascii=False))
 
 
+def preparar_sob_demanda(camada, descricao):
+    """Instala a camada na primeira vez que um programa dela é aberto (a ISO não traz tudo, para ser leve)."""
+    print(f"Para abrir este programa é preciso instalar {descricao}. Isso é feito uma única vez.")
+    if sys.stdin.isatty() and input("Instalar agora? [S/n] ").strip().lower() not in ("", "s", "sim", "y"):
+        sys.exit("Cancelado.")
+    preparar(argparse.Namespace(camada=camada, simular=False))
+
+
+def windows_vm(a):
+    """VM Windows com janelas integradas (estilo RemoteApp), para o que o Wine não roda."""
+    ex = Executor(a.simular)
+    conf = VM_DIR / "windows-11.conf"
+    if a.acao == "criar":
+        if not shutil.which("quickget") and not a.simular:
+            sys.exit("Rode antes: vorticis-compat preparar vm")
+        print("Baixando o Windows 11 diretamente da Microsoft (licença: use sua chave ou o período de avaliação).")
+        if not a.simular:
+            VM_DIR.mkdir(parents=True, exist_ok=True)
+            os.chdir(VM_DIR)
+        ex.rodar(["quickget", "windows", "11"])
+        print("Na primeira inicialização, conclua a instalação do Windows e então, DENTRO dele, rode como administrador:\n"
+              "  reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Terminal Server\\TSAppAllowList\" /v fDisabledAllowList /t REG_DWORD /d 1 /f\n"
+              "e habilite a Área de Trabalho Remota. Depois use: vorticis-compat windows-vm app \"C:\\caminho\\programa.exe\"")
+    elif a.acao == "iniciar":
+        # O quickemu encaminha o RDP do Windows convidado para localhost:3389.
+        ex.rodar(["quickemu", "--vm", conf, "--display", "none"])
+    elif a.acao == "parar":
+        ex.rodar(["quickemu", "--vm", conf, "--kill"], checar=False)
+    elif a.acao == "app":
+        if not a.programa:
+            sys.exit("Informe o programa: vorticis-compat windows-vm app \"C:\\Program Files\\...\\programa.exe\"")
+        cmd = ["xfreerdp3", "/v:127.0.0.1:3389", "/cert:tofu", "+clipboard", "/dynamic-resolution",
+               "/sound", "/microphone", f"/drive:home,{HOME}", f"/app:program:{a.programa}", "/wm-class:vorticis-windows-app"]
+        ex.rodar(cmd, checar=False)
+        nome = Path(a.programa.replace("\\", "/")).stem
+        criar_atalho(ex, "vm-" + nome_seguro(nome), f"{nome} (Windows)",
+                     "vorticis-compat windows-vm app " + json.dumps(a.programa), "computer", "Windows")
+
+
+def office(a):
+    ex = Executor(a.simular)
+    if a.opcao == "libreoffice":
+        ex.rodar(["apt-get", "install", "-y", "libreoffice", "libreoffice-l10n-pt-br", "libreoffice-gtk3"], root=True)
+        print("LibreOffice abre e salva .docx, .xlsx e .pptx. As fontes Carlito/Caladea mantêm o layout de Calibri/Cambria.")
+    elif a.opcao == "onlyoffice":
+        ex.rodar(["flatpak", "install", "-y", "--noninteractive", "flathub", "org.onlyoffice.desktopeditors"])
+        print("ONLYOFFICE: interface parecida com o Microsoft Office e ótima fidelidade com .docx/.xlsx/.pptx.")
+    elif a.opcao == "web":
+        nav = shutil.which("microsoft-edge") or shutil.which("chromium") or shutil.which("google-chrome")
+        for app, url in (("Word", "https://www.office.com/launch/word"), ("Excel", "https://www.office.com/launch/excel"),
+                         ("PowerPoint", "https://www.office.com/launch/powerpoint"), ("Outlook", "https://outlook.office.com/mail/")):
+            exec_cmd = f"{nav or 'chromium'} --app={url}" if nav or a.simular else f"xdg-open {url}"
+            criar_atalho(ex, "m365-" + app.lower(), f"{app} (Microsoft 365)", exec_cmd, "x-office-document", "Office")
+        print("Atalhos do Microsoft 365 criados (abrem como apps, em janela própria). Requer conta Microsoft.")
+    elif a.opcao == "wine":
+        print("Rode o instalador do seu Office 2013/2016 32 bits com:\n  vorticis-compat instalar setup.exe --receita office-2016 --nome \"Microsoft Office\"")
+    elif a.opcao == "vm":
+        print("Office completo (2019/2021/365) via Windows em VM:\n  vorticis-compat preparar vm\n  vorticis-compat windows-vm criar\n"
+              "  (instale o Office dentro do Windows)\n  vorticis-compat windows-vm app \"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE\"")
+
+
+# ------------------------------------------------------------------ outros
 def instalar_android(ex, arq, nome):
     if not shutil.which("waydroid") and not ex.simular:
-        sys.exit("Waydroid não está instalado. Rode: vorticis-compat preparar android")
+        preparar_sob_demanda("android", "Waydroid (apps Android, ~500 MB com a imagem do Android)")
     ex.rodar(["waydroid", "session", "start"], checar=False)
     ex.rodar(["waydroid", "app", "install", arq])
     print(f"'{nome}' aparecerá no lançador como app Android.")
@@ -153,7 +252,7 @@ def instalar_android(ex, arq, nome):
 
 def instalar_appimage(ex, arq, nome):
     destino = APPIMAGES / arq.name
-    print(f"→ mover {arq} para {destino}")
+    print(("[simulação] " if ex.simular else "→ ") + f"copiar {arq} para {destino}")
     if not ex.simular:
         APPIMAGES.mkdir(parents=True, exist_ok=True)
         shutil.copy2(arq, destino)
@@ -161,16 +260,16 @@ def instalar_appimage(ex, arq, nome):
     criar_atalho(ex, nome_seguro(nome), nome, f'"{destino}"')
 
 
-def instalar(args):
-    arq = Path(args.arquivo).expanduser().resolve()
+def instalar(a):
+    arq = Path(a.arquivo).expanduser().resolve()
     if not arq.exists():
         sys.exit(f"Arquivo não encontrado: {arq}")
     tipo = detectar(arq)
-    nome = args.nome or arq.stem
-    ex = Executor(args.simular)
+    nome = a.nome or arq.stem
+    ex = Executor(a.simular)
     print(f"Tipo detectado: {tipo}")
     if tipo == "windows":
-        instalar_windows(ex, arq, nome)
+        instalar_windows(ex, arq, nome, a.receita)
     elif tipo == "android":
         instalar_android(ex, arq, nome)
     elif tipo == "deb":
@@ -182,58 +281,78 @@ def instalar(args):
     elif tipo == "appimage":
         instalar_appimage(ex, arq, nome)
     elif tipo == "flatpak":
-        opc = "--from" if arq.suffix.lower() == ".flatpakref" else "--bundle"
-        ex.rodar(["flatpak", "install", "--user", "-y", opc, arq])
-    elif tipo == "macos":
-        print("⚠ Compatibilidade macOS é limitada (Darling): apenas programas de linha de comando.")
-        ex.rodar(["darling", "shell", "installer", "-pkg" if arq.suffix == ".pkg" else "-dmg", arq], checar=False)
+        ex.rodar(["flatpak", "install", "--user", "-y", "--from" if arq.suffix.lower() == ".flatpakref" else "--bundle", arq])
     elif tipo == "script":
         print("⚠ Scripts executam código arbitrário. Confira o conteúdo antes:", arq)
         ex.rodar(["sh", arq])
     else:
-        sys.exit("Formato não reconhecido. Formatos aceitos: " + ", ".join(sorted(EXTENSOES)))
+        sys.exit("Formato não reconhecido. Aceitos: " + ", ".join(sorted(EXTENSOES)))
 
 
-def preparar(args):
-    ex = Executor(args.simular)
-    camadas = list(PACOTES_CAMADA) if args.camada == "todos" else [args.camada]
-    if "windows" in camadas or "jogos" in camadas:
+def preparar(a):
+    ex = Executor(a.simular)
+    camadas = list(PACOTES_CAMADA) if a.camada == "todos" else [a.camada]
+    if {"windows", "jogos"} & set(camadas):
         ex.rodar(["dpkg", "--add-architecture", "i386"], root=True)
-    pacotes = sorted({p for c in camadas for p in PACOTES_CAMADA.get(c, [])})
+    if "fontes" in camadas:
+        ex.rodar(["sh", "-c", "echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections"], root=True)
+    pacotes = sorted({p for c in camadas for p in PACOTES_CAMADA.get(c, []) if c != "android"})
     ex.rodar(["apt-get", "update"], root=True)
-    ex.rodar(["apt-get", "install", "-y"] + pacotes, root=True)
+    if pacotes:
+        ex.rodar(["apt-get", "install", "-y"] + pacotes, root=True)
     for c in camadas:
         for fp in FLATPAKS_CAMADA.get(c, []):
             ex.rodar(["flatpak", "install", "-y", "--noninteractive", "flathub", fp], checar=False)
     if "android" in camadas:
+        ex.rodar(["apt-get", "install", "-y", "waydroid"], root=True, checar=False)
         ex.rodar(["waydroid", "init", "-s", "GAPPS"], root=True, checar=False)
         ex.rodar(["systemctl", "enable", "--now", "waydroid-container"], root=True, checar=False)
-    if "macos" in camadas:
-        print("Darling não está nos repositórios Debian: o pacote vem do repositório Vorticis (ver build/).")
-        print("Observação: o Vorticis não distribui imagens do macOS (licença da Apple).")
+    if "vm" in camadas:
+        ex.rodar(["usermod", "-aG", "kvm", os.environ.get("SUDO_USER") or os.environ.get("USER", "")], root=True, checar=False)
 
 
-def status(_args):
-    camadas = {
-        "Linux nativo (apt)": "apt-get", "Flatpak": "flatpak", "Windows (Wine)": "wine",
-        "Windows (Bottles)": "bottles", "Jogos (Steam/Proton)": "steam", "Android (Waydroid)": "waydroid",
-        "RPM (Distrobox)": "distrobox", "macOS (Darling)": "darling",
-    }
-    for nome, binario in camadas.items():
-        ok = shutil.which(binario) is not None
-        if not ok and binario == "bottles":
-            ok = subprocess.run(["flatpak", "info", "com.usebottles.bottles"], capture_output=True).returncode == 0 \
-                if shutil.which("flatpak") else False
+def receitas(_a):
+    d = carregar_receitas()
+    for r in d["receitas"]:
+        print(f"  {r['id']:<16} {r['nome']}")
+        print(f"  {'':<16} winetricks: {', '.join(r.get('verbos', []))}")
+    print("\nSem suporte no Wine (use a VM Windows):")
+    for s in d.get("sem_suporte_wine", []):
+        print("  " + ", ".join(s["padroes"]))
+
+
+def status(_a):
+    def tem(b):
+        return shutil.which(b) is not None
+
+    def flat(app):
+        return tem("flatpak") and subprocess.run(["flatpak", "info", app], capture_output=True).returncode == 0
+
+    linhas = [
+        ("Linux nativo (apt)", tem("apt-get")), ("Flatpak", tem("flatpak")),
+        ("Windows — Wine", tem("wine")), ("Windows — winetricks", tem("winetricks")),
+        ("Windows — Bottles", flat("com.usebottles.bottles")), ("Windows — VM integrada", tem("quickemu") and tem("xfreerdp3")),
+        ("Jogos — Steam/Proton", tem("steam")), ("Jogos — Heroic", flat("com.heroicgameslauncher.hgl")),
+        ("Android — Waydroid", tem("waydroid")), ("RPM — Distrobox", tem("distrobox")),
+    ]
+    for nome, ok in linhas:
         print(f"  {'✔' if ok else '✘'} {nome}")
 
 
 def main():
     ap = argparse.ArgumentParser(prog="vorticis-compat", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("instalar"); p.add_argument("arquivo"); p.add_argument("--nome"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=instalar)
+    p = sub.add_parser("instalar"); p.add_argument("arquivo"); p.add_argument("--nome"); p.add_argument("--receita")
+    p.add_argument("--simular", action="store_true"); p.set_defaults(f=instalar)
     p = sub.add_parser("detectar"); p.add_argument("arquivo"); p.set_defaults(f=lambda a: print(detectar(Path(a.arquivo))))
-    p = sub.add_parser("preparar"); p.add_argument("camada", choices=list(PACOTES_CAMADA) + ["todos"]); p.add_argument("--simular", action="store_true"); p.set_defaults(f=preparar)
-    p = sub.add_parser("status"); p.set_defaults(f=status)
+    sub.add_parser("receitas").set_defaults(f=receitas)
+    p = sub.add_parser("preparar"); p.add_argument("camada", choices=list(PACOTES_CAMADA) + ["todos"])
+    p.add_argument("--simular", action="store_true"); p.set_defaults(f=preparar)
+    p = sub.add_parser("office"); p.add_argument("opcao", choices=["libreoffice", "onlyoffice", "web", "wine", "vm"])
+    p.add_argument("--simular", action="store_true"); p.set_defaults(f=office)
+    p = sub.add_parser("windows-vm"); p.add_argument("acao", choices=["criar", "iniciar", "app", "parar"]); p.add_argument("programa", nargs="?")
+    p.add_argument("--simular", action="store_true"); p.set_defaults(f=windows_vm)
+    sub.add_parser("status").set_defaults(f=status)
     a = ap.parse_args()
     a.f(a)
 

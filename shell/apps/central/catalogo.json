@@ -1,0 +1,581 @@
+{
+ "versao": 1,
+ "categorias": [
+  "Multimídia",
+  "Internet",
+  "Comunicação",
+  "Escritório",
+  "Jogos",
+  "Android",
+  "Windows",
+  "Gráficos",
+  "Desenvolvimento",
+  "Educação",
+  "Utilitários"
+ ],
+ "apps": [
+  {
+   "id": "vorticis-music",
+   "nome": "Vorticis Music",
+   "categoria": "Multimídia",
+   "icone": "🎵",
+   "cor": "#e76f51",
+   "fonte": "vorticis:musica",
+   "descricao": "Reprodutor de música com equalizador, visualizador, favoritos e capas.",
+   "destaque": true
+  },
+  {
+   "id": "vorticis-video",
+   "nome": "Vorticis Video Player",
+   "categoria": "Multimídia",
+   "icone": "🎬",
+   "cor": "#d62828",
+   "fonte": "vorticis:video",
+   "descricao": "Vídeos locais e por endereço, legendas .srt, velocidade e janela flutuante.",
+   "destaque": true
+  },
+  {
+   "id": "firefox",
+   "nome": "Firefox",
+   "categoria": "Internet",
+   "icone": "🦊",
+   "cor": "#ff7139",
+   "fonte": "apt:firefox-esr",
+   "descricao": "Navegador livre da Mozilla, com proteção contra rastreamento."
+  },
+  {
+   "id": "chromium",
+   "nome": "Chromium",
+   "categoria": "Internet",
+   "icone": "🌐",
+   "cor": "#4285f4",
+   "fonte": "flatpak:org.chromium.Chromium",
+   "descricao": "Base de código aberto do Google Chrome."
+  },
+  {
+   "id": "chrome",
+   "nome": "Google Chrome",
+   "categoria": "Internet",
+   "icone": "🟡",
+   "cor": "#fbbc05",
+   "fonte": "flatpak:com.google.Chrome",
+   "descricao": "Navegador do Google, sincroniza com sua conta."
+  },
+  {
+   "id": "brave",
+   "nome": "Brave",
+   "categoria": "Internet",
+   "icone": "🦁",
+   "cor": "#fb542b",
+   "fonte": "flatpak:com.brave.Browser",
+   "descricao": "Navegador com bloqueio de anúncios embutido."
+  },
+  {
+   "id": "edge",
+   "nome": "Microsoft Edge",
+   "categoria": "Internet",
+   "icone": "🌊",
+   "cor": "#0078d4",
+   "fonte": "flatpak:com.microsoft.Edge",
+   "descricao": "Navegador da Microsoft, ótimo para Microsoft 365."
+  },
+  {
+   "id": "opera",
+   "nome": "Opera",
+   "categoria": "Internet",
+   "icone": "⭕",
+   "cor": "#ff1b2d",
+   "fonte": "flatpak:com.opera.Opera",
+   "descricao": "Navegador com VPN e mensageiros integrados."
+  },
+  {
+   "id": "vivaldi",
+   "nome": "Vivaldi",
+   "categoria": "Internet",
+   "icone": "🎻",
+   "cor": "#ef3939",
+   "fonte": "flatpak:com.vivaldi.Vivaldi",
+   "descricao": "Navegador altamente personalizável."
+  },
+  {
+   "id": "thunderbird",
+   "nome": "Thunderbird",
+   "categoria": "Internet",
+   "icone": "✉️",
+   "cor": "#0a84ff",
+   "fonte": "flatpak:org.mozilla.Thunderbird",
+   "descricao": "E-mail, agenda e contatos."
+  },
+  {
+   "id": "discord",
+   "nome": "Discord",
+   "categoria": "Comunicação",
+   "icone": "💬",
+   "cor": "#5865f2",
+   "fonte": "flatpak:com.discordapp.Discord",
+   "descricao": "Voz, vídeo e texto para comunidades e jogos."
+  },
+  {
+   "id": "telegram",
+   "nome": "Telegram",
+   "categoria": "Comunicação",
+   "icone": "✈️",
+   "cor": "#2aabee",
+   "fonte": "flatpak:org.telegram.desktop",
+   "descricao": "Mensageiro rápido e na nuvem."
+  },
+  {
+   "id": "whatsapp",
+   "nome": "WhatsApp (ZapZap)",
+   "categoria": "Comunicação",
+   "icone": "🟢",
+   "cor": "#25d366",
+   "fonte": "flatpak:com.rtosta.zapzap",
+   "descricao": "Cliente do WhatsApp Web em janela própria."
+  },
+  {
+   "id": "signal",
+   "nome": "Signal",
+   "categoria": "Comunicação",
+   "icone": "🔵",
+   "cor": "#3a76f0",
+   "fonte": "flatpak:org.signal.Signal",
+   "descricao": "Mensagens com criptografia de ponta a ponta."
+  },
+  {
+   "id": "zoom",
+   "nome": "Zoom",
+   "categoria": "Comunicação",
+   "icone": "📹",
+   "cor": "#2d8cff",
+   "fonte": "flatpak:us.zoom.Zoom",
+   "descricao": "Videoconferências."
+  },
+  {
+   "id": "teams",
+   "nome": "Teams for Linux",
+   "categoria": "Comunicação",
+   "icone": "👥",
+   "cor": "#5b5fc7",
+   "fonte": "flatpak:com.github.IsmaelMartinez.teams_for_linux",
+   "descricao": "Cliente não oficial do Microsoft Teams."
+  },
+  {
+   "id": "slack",
+   "nome": "Slack",
+   "categoria": "Comunicação",
+   "icone": "#️⃣",
+   "cor": "#4a154b",
+   "fonte": "flatpak:com.slack.Slack",
+   "descricao": "Comunicação para equipes."
+  },
+  {
+   "id": "libreoffice",
+   "nome": "LibreOffice",
+   "categoria": "Escritório",
+   "icone": "📝",
+   "cor": "#18a303",
+   "fonte": "flatpak:org.libreoffice.LibreOffice",
+   "descricao": "Textos, planilhas e apresentações; abre .docx/.xlsx/.pptx."
+  },
+  {
+   "id": "onlyoffice",
+   "nome": "ONLYOFFICE",
+   "categoria": "Escritório",
+   "icone": "📄",
+   "cor": "#ff6f3d",
+   "fonte": "flatpak:org.onlyoffice.desktopeditors",
+   "descricao": "Visual parecido com o Microsoft Office e ótima compatibilidade.",
+   "destaque": true
+  },
+  {
+   "id": "m365",
+   "nome": "Microsoft 365 (web)",
+   "categoria": "Escritório",
+   "icone": "🟦",
+   "cor": "#d83b01",
+   "fonte": "compat:office web",
+   "descricao": "Word, Excel, PowerPoint e Outlook como apps em janela."
+  },
+  {
+   "id": "office-wine",
+   "nome": "Microsoft Office 2013/2016",
+   "categoria": "Escritório",
+   "icone": "🪟",
+   "cor": "#d83b01",
+   "fonte": "compat:office wine",
+   "descricao": "Instale seu Office 2013/2016 32 bits pelo Wine com ajustes automáticos."
+  },
+  {
+   "id": "okular",
+   "nome": "Okular",
+   "categoria": "Escritório",
+   "icone": "📕",
+   "cor": "#e94b35",
+   "fonte": "flatpak:org.kde.okular",
+   "descricao": "Leitor de PDF com anotações e assinaturas."
+  },
+  {
+   "id": "calibre",
+   "nome": "Calibre",
+   "categoria": "Escritório",
+   "icone": "📚",
+   "cor": "#7d5a2b",
+   "fonte": "flatpak:com.calibre_ebook.calibre",
+   "descricao": "Biblioteca e conversor de e-books."
+  },
+  {
+   "id": "obsidian",
+   "nome": "Obsidian",
+   "categoria": "Escritório",
+   "icone": "🔮",
+   "cor": "#7c3aed",
+   "fonte": "flatpak:md.obsidian.Obsidian",
+   "descricao": "Notas e base de conhecimento em Markdown."
+  },
+  {
+   "id": "steam",
+   "nome": "Steam",
+   "categoria": "Jogos",
+   "icone": "🎮",
+   "cor": "#1b2838",
+   "fonte": "apt:steam-installer",
+   "descricao": "Loja e Proton: jogos de Windows rodando no Vorticis.",
+   "destaque": true
+  },
+  {
+   "id": "heroic",
+   "nome": "Heroic Games Launcher",
+   "categoria": "Jogos",
+   "icone": "🛡️",
+   "cor": "#6a4c93",
+   "fonte": "flatpak:com.heroicgameslauncher.hgl",
+   "descricao": "Jogos da Epic Games, GOG e Amazon."
+  },
+  {
+   "id": "lutris",
+   "nome": "Lutris",
+   "categoria": "Jogos",
+   "icone": "🦦",
+   "cor": "#f4a261",
+   "fonte": "flatpak:net.lutris.Lutris",
+   "descricao": "Gerenciador de jogos de várias lojas e emuladores."
+  },
+  {
+   "id": "protonup",
+   "nome": "ProtonUp-Qt",
+   "categoria": "Jogos",
+   "icone": "⬆️",
+   "cor": "#e76f51",
+   "fonte": "flatpak:net.davidotek.pupgui2",
+   "descricao": "Instala Proton-GE e outras versões do Proton."
+  },
+  {
+   "id": "prism",
+   "nome": "Prism Launcher",
+   "categoria": "Jogos",
+   "icone": "⛏️",
+   "cor": "#43a047",
+   "fonte": "flatpak:org.prismlauncher.PrismLauncher",
+   "descricao": "Minecraft Java com várias instâncias e mods."
+  },
+  {
+   "id": "luanti",
+   "nome": "Luanti",
+   "categoria": "Jogos",
+   "icone": "🧱",
+   "cor": "#8bc34a",
+   "fonte": "flatpak:org.luanti.luanti",
+   "descricao": "Jogo de blocos livre (antigo Minetest)."
+  },
+  {
+   "id": "parsec",
+   "nome": "Parsec",
+   "categoria": "Jogos",
+   "icone": "🛰️",
+   "cor": "#7b61ff",
+   "fonte": "flatpak:com.parsecgaming.parsec",
+   "descricao": "Jogue remotamente no seu PC Windows."
+  },
+  {
+   "id": "android",
+   "nome": "Android (Waydroid)",
+   "categoria": "Android",
+   "icone": "🤖",
+   "cor": "#3ddc84",
+   "fonte": "compat:preparar android",
+   "descricao": "Rode apps Android nativamente, em contêiner.",
+   "destaque": true
+  },
+  {
+   "id": "bottles",
+   "nome": "Bottles",
+   "categoria": "Windows",
+   "icone": "🍾",
+   "cor": "#3584e4",
+   "fonte": "flatpak:com.usebottles.bottles",
+   "descricao": "Ambientes isolados para programas Windows."
+  },
+  {
+   "id": "windows-vm",
+   "nome": "Windows integrado (VM)",
+   "categoria": "Windows",
+   "icone": "🖥️",
+   "cor": "#0078d4",
+   "fonte": "compat:preparar vm",
+   "descricao": "Windows real em máquina virtual, com janelas na sua área de trabalho."
+  },
+  {
+   "id": "vlc",
+   "nome": "VLC",
+   "categoria": "Multimídia",
+   "icone": "🔶",
+   "cor": "#ff8800",
+   "fonte": "flatpak:org.videolan.VLC",
+   "descricao": "Reproduz praticamente qualquer formato de vídeo."
+  },
+  {
+   "id": "spotify",
+   "nome": "Spotify",
+   "categoria": "Multimídia",
+   "icone": "🎧",
+   "cor": "#1db954",
+   "fonte": "flatpak:com.spotify.Client",
+   "descricao": "Streaming de música."
+  },
+  {
+   "id": "obs",
+   "nome": "OBS Studio",
+   "categoria": "Multimídia",
+   "icone": "🔴",
+   "cor": "#302e31",
+   "fonte": "flatpak:com.obsproject.Studio",
+   "descricao": "Gravação de tela e transmissões ao vivo."
+  },
+  {
+   "id": "kdenlive",
+   "nome": "Kdenlive",
+   "categoria": "Multimídia",
+   "icone": "🎞️",
+   "cor": "#1d99f3",
+   "fonte": "flatpak:org.kde.kdenlive",
+   "descricao": "Editor de vídeo profissional."
+  },
+  {
+   "id": "audacity",
+   "nome": "Audacity",
+   "categoria": "Multimídia",
+   "icone": "🎙️",
+   "cor": "#0000cc",
+   "fonte": "flatpak:org.audacityteam.Audacity",
+   "descricao": "Gravação e edição de áudio."
+  },
+  {
+   "id": "easyeffects",
+   "nome": "Easy Effects",
+   "categoria": "Multimídia",
+   "icone": "🎛️",
+   "cor": "#2e7d32",
+   "fonte": "flatpak:com.github.wwmm.easyeffects",
+   "descricao": "Efeitos e equalizador para todo o sistema."
+  },
+  {
+   "id": "gimp",
+   "nome": "GIMP",
+   "categoria": "Gráficos",
+   "icone": "🖌️",
+   "cor": "#5c5543",
+   "fonte": "flatpak:org.gimp.GIMP",
+   "descricao": "Edição de imagens avançada."
+  },
+  {
+   "id": "krita",
+   "nome": "Krita",
+   "categoria": "Gráficos",
+   "icone": "🎨",
+   "cor": "#3babff",
+   "fonte": "flatpak:org.kde.krita",
+   "descricao": "Pintura digital."
+  },
+  {
+   "id": "inkscape",
+   "nome": "Inkscape",
+   "categoria": "Gráficos",
+   "icone": "✒️",
+   "cor": "#000000",
+   "fonte": "flatpak:org.inkscape.Inkscape",
+   "descricao": "Desenho vetorial."
+  },
+  {
+   "id": "pinta",
+   "nome": "Pinta",
+   "categoria": "Gráficos",
+   "icone": "🖍️",
+   "cor": "#f9a825",
+   "fonte": "flatpak:com.github.PintaProject.Pinta",
+   "descricao": "Editor de imagens simples, estilo Paint."
+  },
+  {
+   "id": "blender",
+   "nome": "Blender",
+   "categoria": "Gráficos",
+   "icone": "🧊",
+   "cor": "#f5792a",
+   "fonte": "flatpak:org.blender.Blender",
+   "descricao": "Modelagem 3D, animação e renderização."
+  },
+  {
+   "id": "freecad",
+   "nome": "FreeCAD",
+   "categoria": "Gráficos",
+   "icone": "📐",
+   "cor": "#cb333b",
+   "fonte": "flatpak:org.freecad.FreeCAD",
+   "descricao": "CAD 3D paramétrico."
+  },
+  {
+   "id": "vscode",
+   "nome": "Visual Studio Code",
+   "categoria": "Desenvolvimento",
+   "icone": "🧩",
+   "cor": "#0078d4",
+   "fonte": "flatpak:com.visualstudio.code",
+   "descricao": "Editor de código da Microsoft."
+  },
+  {
+   "id": "vscodium",
+   "nome": "VSCodium",
+   "categoria": "Desenvolvimento",
+   "icone": "💠",
+   "cor": "#2f80ed",
+   "fonte": "flatpak:com.vscodium.codium",
+   "descricao": "VS Code sem telemetria."
+  },
+  {
+   "id": "intellij",
+   "nome": "IntelliJ IDEA Community",
+   "categoria": "Desenvolvimento",
+   "icone": "💡",
+   "cor": "#fe315d",
+   "fonte": "flatpak:com.jetbrains.IntelliJ-IDEA-Community",
+   "descricao": "IDE para Java e Kotlin."
+  },
+  {
+   "id": "github-desktop",
+   "nome": "GitHub Desktop",
+   "categoria": "Desenvolvimento",
+   "icone": "🐙",
+   "cor": "#24292e",
+   "fonte": "flatpak:io.github.shiftey.Desktop",
+   "descricao": "Git com interface gráfica."
+  },
+  {
+   "id": "podman-desktop",
+   "nome": "Podman Desktop",
+   "categoria": "Desenvolvimento",
+   "icone": "🦭",
+   "cor": "#892ca0",
+   "fonte": "flatpak:io.podman_desktop.PodmanDesktop",
+   "descricao": "Contêineres e Kubernetes."
+  },
+  {
+   "id": "gcompris",
+   "nome": "GCompris",
+   "categoria": "Educação",
+   "icone": "🧠",
+   "cor": "#ffb703",
+   "fonte": "flatpak:org.kde.gcompris",
+   "descricao": "Mais de 100 atividades educativas para crianças."
+  },
+  {
+   "id": "tuxpaint",
+   "nome": "Tux Paint",
+   "categoria": "Educação",
+   "icone": "🐧",
+   "cor": "#fb8500",
+   "fonte": "apt:tuxpaint",
+   "descricao": "Desenho divertido para crianças."
+  },
+  {
+   "id": "anydesk",
+   "nome": "AnyDesk",
+   "categoria": "Utilitários",
+   "icone": "🖧",
+   "cor": "#ef443b",
+   "fonte": "flatpak:com.anydesk.Anydesk",
+   "descricao": "Acesso remoto."
+  },
+  {
+   "id": "rustdesk",
+   "nome": "RustDesk",
+   "categoria": "Utilitários",
+   "icone": "🦀",
+   "cor": "#024eff",
+   "fonte": "flatpak:com.rustdesk.RustDesk",
+   "descricao": "Acesso remoto de código aberto."
+  },
+  {
+   "id": "remmina",
+   "nome": "Remmina",
+   "categoria": "Utilitários",
+   "icone": "🔌",
+   "cor": "#1a73e8",
+   "fonte": "flatpak:org.remmina.Remmina",
+   "descricao": "Área de trabalho remota (RDP, VNC)."
+  },
+  {
+   "id": "qbittorrent",
+   "nome": "qBittorrent",
+   "categoria": "Utilitários",
+   "icone": "⬇️",
+   "cor": "#2f67ba",
+   "fonte": "flatpak:org.qbittorrent.qBittorrent",
+   "descricao": "Cliente BitTorrent."
+  },
+  {
+   "id": "flatseal",
+   "nome": "Flatseal",
+   "categoria": "Utilitários",
+   "icone": "🔏",
+   "cor": "#4a90d9",
+   "fonte": "flatpak:com.github.tchx84.Flatseal",
+   "descricao": "Permissões dos apps Flatpak."
+  },
+  {
+   "id": "missioncenter",
+   "nome": "Mission Center",
+   "categoria": "Utilitários",
+   "icone": "📊",
+   "cor": "#3584e4",
+   "fonte": "flatpak:io.missioncenter.MissionCenter",
+   "descricao": "Monitor de CPU, memória, disco, rede e GPU."
+  },
+  {
+   "id": "gearlever",
+   "nome": "Gear Lever",
+   "categoria": "Utilitários",
+   "icone": "⚙️",
+   "cor": "#62a0ea",
+   "fonte": "flatpak:it.mijorus.gearlever",
+   "descricao": "Integra arquivos AppImage ao sistema."
+  },
+  {
+   "id": "boxes",
+   "nome": "GNOME Boxes",
+   "categoria": "Utilitários",
+   "icone": "📦",
+   "cor": "#3584e4",
+   "fonte": "flatpak:org.gnome.Boxes",
+   "descricao": "Máquinas virtuais simples."
+  },
+  {
+   "id": "irpf",
+   "nome": "IRPF (Receita Federal)",
+   "categoria": "Utilitários",
+   "icone": "🧾",
+   "cor": "#1b5e20",
+   "fonte": "web:https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/download/pgd/dirpf",
+   "descricao": "Programa do Imposto de Renda — versão Linux oficial no site da Receita."
+  }
+ ]
+}

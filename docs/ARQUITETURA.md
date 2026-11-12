@@ -2,15 +2,18 @@
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│  Vorticis Shell  (área de trabalho, barra de tarefas, temas, água)    │
-├──────────────┬──────────────┬──────────────┬──────────────┬───────────┤
-│ Apps Linux   │ Apps Windows │ Apps Android │ Apps macOS   │ Web apps  │
-│ deb/flatpak/ │ Wine + Proton│ Waydroid     │ Darling (CLI)│ navegador │
-│ AppImage     │ (Steam/Bottl)│ (contêiner)  │ / VM opcional│           │
-├──────────────┴──────────────┴──────────────┴──────────────┴───────────┤
-│  vorticis-compat  →  decide a camada certa para cada instalador       │
+│  Vorticis Shell (área de trabalho, barra, 12 temas, personalização)   │
+│  Apps Vorticis: Music · Video · Central de Apps · Configurações ·     │
+│                 Monitor · Notas · Calculadora   (vorticis-app)        │
+├─────────────────┬─────────────────┬─────────────────┬─────────────────┤
+│ Apps Linux      │ Apps Windows    │ Apps Android    │ Web apps        │
+│ deb/Flatpak/    │ Wine + receitas │ Waydroid        │ navegadores,    │
+│ AppImage/rpm    │ Proton · VM     │ (contêiner)     │ Microsoft 365   │
+├─────────────────┴─────────────────┴─────────────────┴─────────────────┤
+│  vorticis-compat / vorticis-apps → camada certa para cada programa    │
 ├───────────────────────────────────────────────────────────────────────┤
-│  Serviços Vorticis: drivers · recursos · usuários · navegadores       │
+│  Ferramentas: drivers · tela · recursos · usuários · rede · backup ·  │
+│               jogos · navegadores · sistema · mídia                   │
 ├───────────────────────────────────────────────────────────────────────┤
 │  Segurança: nftables · AppArmor · DNS-over-TLS · polkit · sudo        │
 ├───────────────────────────────────────────────────────────────────────┤
@@ -26,15 +29,18 @@
    é estável e tem `live-build` para gerar ISOs reprodutíveis.
 2. **Sessão Wayland com `labwc`** (compositor leve, ~20 MB de RAM) e fallback X11. O shell do Vorticis
    roda por cima: papel de parede vivo, barra de tarefas e lançador.
-3. **Shell em tecnologia web renderizada por WebKitGTK** (não Electron — reaproveita a engine do sistema
+3. **Shell e apps Vorticis em tecnologia web renderizada por WebKitGTK** (não Electron — reaproveita a engine do sistema
    e economiza memória). O fundo de água usa WebGL com **três níveis de qualidade**:
    - `alto`: simulação de ondas em GPU (WebGL, shader de refração);
    - `leve`: simulação em Canvas 2D com resolução reduzida (CPU);
    - `estatico`: imagem/gradiente, zero custo — escolhido automaticamente sem GPU ou na bateria fraca.
+
+   Além da água, há os efeitos "bolhas" e "aurora", com os mesmos níveis de qualidade. Os apps
+   Vorticis só executam ferramentas `vorticis-*` (lista fixa no `vorticis-app`), nunca comandos livres.
 4. **Compatibilidade por camadas, não por emulação total.** Wine/Proton traduzem chamadas do Windows
    em tempo real (desempenho quase nativo, inclusive jogos via DXVK/VKD3D). Waydroid executa Android
-   em contêiner com o mesmo kernel — nativo, sem emulador. macOS é o ponto fraco (ver
-   [COMPATIBILIDADE.md](COMPATIBILIDADE.md)).
+   em contêiner com o mesmo kernel — nativo, sem emulador. O que o Wine não roda (Office 365,
+   AutoCAD...) vai para uma VM Windows com janelas integradas. Ver [COMPATIBILIDADE.md](COMPATIBILIDADE.md).
 5. **Ferramentas próprias em Python 3** (sem dependências fora da biblioteca padrão), fáceis de auditar,
    com modo `--simular` para mostrar o que seria feito antes de mudar o sistema.
 
@@ -61,8 +67,9 @@ As regras ficam em `/etc/polkit-1/rules.d/50-vorticis.rules` (instalado por `vor
 
 ```
 build/       live-build: pacotes, hooks, arquivos copiados para a ISO
-shell/       área de trabalho (HTML/JS/CSS) + temas
-tools/       vorticis-compat, -drivers, -recursos, -usuarios, -navegadores
+shell/       área de trabalho (HTML/JS/CSS), temas, apps Vorticis (shell/apps), lançadores
+tools/       vorticis-apps, -compat, -drivers, -tela, -recursos, -usuarios, -rede, -backup,
+             -jogos, -navegadores, -sistema, -midia
 installer/   Calamares (pen-drive) + instaladores a partir de Linux/Windows ativos
 security/    nftables, resolved, NetworkManager, AppArmor
 docs/        esta documentação

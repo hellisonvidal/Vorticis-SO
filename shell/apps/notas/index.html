@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vorticis Notas</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .lateral { width: 240px; }
+    .nota-item { flex-direction: column; align-items: flex-start !important; gap: 2px !important; }
+    .nota-item small { color: var(--texto-suave); font-size: 11px; }
+    .conteudo { display: flex; flex-direction: column; padding: 0; }
+    #titulo { border: 0; background: transparent; font-size: 22px; font-weight: 600; padding: 18px 24px 6px; outline: none; }
+    #texto { flex: 1; border: 0; background: transparent; resize: none; padding: 8px 24px 24px; outline: none; font: 15px/1.6 var(--fonte); }
+    .rodape { display: flex; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--borda); align-items: center; font-size: 12px; color: var(--texto-suave); }
+  </style>
+</head>
+<body>
+  <header class="cabecalho"><h1><span class="logo-app">🗒️</span> Vorticis Notas</h1><span class="espaco"></span>
+    <input class="campo" id="busca" type="search" placeholder="Buscar notas">
+    <button class="botao primario" id="nova">＋ Nova nota</button></header>
+  <div class="corpo">
+    <nav class="lateral" id="lista"></nav>
+    <main class="conteudo">
+      <input id="titulo" placeholder="Título">
+      <textarea id="texto" placeholder="Escreva aqui… (salva automaticamente)"></textarea>
+      <div class="rodape"><span id="status">Salvo</span><span class="espaco" style="flex:1"></span>
+        <button class="botao" id="exportar">⬇️ Exportar .txt</button><button class="botao perigo" id="apagar">🗑️ Apagar</button></div>
+    </main>
+  </div>
+  <script src="../comum/app.js"></script>
+  <script>
+  (function () {
+    const { el, prefs } = Vorticis;
+    const $ = (s) => document.querySelector(s);
+    let notas = prefs.ler("notas", [{ id: Date.now(), titulo: "Bem-vindo ao Vorticis Notas", texto: "Suas notas ficam salvas automaticamente neste computador.\n\nDica: Ctrl+N cria uma nova nota.", data: Date.now() }]);
+    let atual = notas[0];
+    const salvar = () => { prefs.gravar("notas", notas); $("#status").textContent = "Salvo às " + new Date().toLocaleTimeString("pt-BR"); };
+    function lista() {
+      const q = $("#busca").value.toLowerCase();
+      $("#lista").replaceChildren(...notas.filter((n) => (n.titulo + n.texto).toLowerCase().includes(q)).sort((a, b) => b.data - a.data).map((n) =>
+        el("button", { class: "nota-item", "aria-current": String(n === atual), onclick: () => { atual = n; abrir(); } },
+          [el("b", { texto: n.titulo || "Sem título" }), el("small", { texto: new Date(n.data).toLocaleString("pt-BR") })])));
+    }
+    function abrir() { $("#titulo").value = atual ? atual.titulo : ""; $("#texto").value = atual ? atual.texto : ""; lista(); }
+    function nova() { atual = { id: Date.now(), titulo: "", texto: "", data: Date.now() }; notas.push(atual); abrir(); $("#titulo").focus(); }
+    let t;
+    const editar = () => { if (!atual) nova(); atual.titulo = $("#titulo").value; atual.texto = $("#texto").value; atual.data = Date.now();
+      $("#status").textContent = "Salvando…"; clearTimeout(t); t = setTimeout(() => { salvar(); lista(); }, 400); };
+    $("#titulo").oninput = editar; $("#texto").oninput = editar; $("#nova").onclick = nova; $("#busca").oninput = lista;
+    $("#apagar").onclick = () => { if (atual && confirm("Apagar esta nota?")) { notas = notas.filter((n) => n !== atual); atual = notas[0]; salvar(); abrir(); } };
+    $("#exportar").onclick = () => { if (!atual) return; const a = el("a", { download: (atual.titulo || "nota") + ".txt", href: URL.createObjectURL(new Blob([atual.titulo + "\n\n" + atual.texto])) }); a.click(); };
+    document.addEventListener("keydown", (e) => { if (e.ctrlKey && e.key.toLowerCase() === "n") { e.preventDefault(); nova(); } });
+    abrir();
+  })();
+  </script>
+</body>
+</html>

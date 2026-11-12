@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""vorticis-backup — pontos de restauração do sistema e cópia de segurança dos arquivos pessoais.
+
+Uso:
+  vorticis-backup sistema criar [DESCRICAO] [--simular]   snapshot Btrfs (snapper) da raiz
+  vorticis-backup sistema listar
+  vorticis-backup sistema restaurar NUMERO [--simular]    volta o sistema ao ponto escolhido (requer reinício)
+  vorticis-backup pessoal DESTINO [--simular]             copia a pasta pessoal (incremental, rsync)
+  vorticis-backup automatico {ligar,desligar}            ponto de restauração diário + antes de cada atualização
+
+O instalador do Vorticis usa Btrfs por padrão, o que torna os pontos de restauração instantâneos.
+"""
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def rodar(cmd, simular=False, root=True):
+    if root and os.geteuid() != 0:
+        cmd = (["pkexec"] if shutil.which("pkexec") else ["sudo"]) + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd), flush=True)
+    return 0 if simular else subprocess.run(cmd).returncode
+
+
+def raiz_btrfs():
+    for linha in Path("/proc/mounts").read_text().splitlines():
+        p = linha.split()
+        if p[1] == "/":
+            return p[2] == "btrfs"
+    return False
+
+
+def garantir_snapper(simular):
+    if not raiz_btrfs() and not simular:
+        sys.exit("Pontos de restauração exigem Btrfs na raiz (padrão do instalador Vorticis). "
+                 "Use 'vorticis-backup pessoal DESTINO' para copiar seus arquivos.")
+    if not Path("/etc/snapper/configs/root").exists():
+        rodar(["snapper", "-c", "root", "create-config", "/"], simular)
+
+
+def cmd_sistema(a):
+    if a.acao == "listar":
+        sys.exit(rodar(["snapper", "-c", "root", "list"]))
+    garantir_snapper(a.simular)
+    if a.acao == "criar":
+        desc = a.arg or "Ponto de restauração manual"
+        rodar(["snapper", "-c", "root", "create", "--description", desc, "--cleanup-algorithm", "number"], a.simular)
+    elif a.acao == "restaurar":
+        if not a.arg or not a.arg.isdigit():
+            sys.exit("Informe o número do ponto (veja: vorticis-backup sistema listar).")
+        rodar(["snapper", "-c", "root", "rollback", a.arg], a.simular)
+        print("Reinicie o computador para concluir a restauração.")
+
+
+def cmd_pessoal(a):
+    destino = Path(a.destino).expanduser()
+    if not a.simular and not destino.exists():
+        sys.exit(f"Destino não existe: {destino} (conecte o HD externo ou crie a pasta).")
+    alvo = destino / f"vorticis-backup-{os.environ.get('USER', 'usuario')}"
+    exclusoes = [".cache", ".local/share/Trash", ".local/share/vorticis/wine/*/drive_c/windows",
+                 ".var/app/*/cache", ".local/share/waydroid", "Downloads/*.iso"]
+    cmd = ["rsync", "-aHAX", "--delete", "--info=progress2", "--human-readable"]
+    for e in exclusoes:
+        cmd += ["--exclude", e]
+    cmd += [str(Path.home()) + "/", str(alvo) + "/"]
+    rodar(cmd, a.simular, root=False)
+
+
+def cmd_automatico(a):
+    if a.acao == "ligar":
+        rodar(["systemctl", "enable", "--now", "snapper-timeline.timer", "snapper-cleanup.timer"], a.simular)
+        print("Pontos de restauração automáticos ligados (a cada hora, mantendo os mais recentes).")
+        print("Antes de cada atualização via apt, o pacote 'snapper' também cria um ponto (hook do apt).")
+    else:
+        rodar(["systemctl", "disable", "--now", "snapper-timeline.timer"], a.simular)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-backup", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("sistema"); p.add_argument("acao", choices=["criar", "listar", "restaurar"]); p.add_argument("arg", nargs="?")
+    p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_sistema)
+    p = sub.add_parser("pessoal"); p.add_argument("destino"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_pessoal)
+    p = sub.add_parser("automatico"); p.add_argument("acao", choices=["ligar", "desligar"]); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_automatico)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

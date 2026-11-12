@@ -2,14 +2,11 @@
 # Configura o sistema dentro da imagem (executado pelo live-build no chroot).
 set -e
 
-# --- Arquitetura 32 bits: necessária para Wine e Steam ---
-dpkg --add-architecture i386
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    wine32:i386 mesa-vulkan-drivers:i386 libgl1-mesa-dri:i386
-echo steam steam/question select "I AGREE" | debconf-set-selections
-echo steam steam/license note '' | debconf-set-selections
-DEBIAN_FRONTEND=noninteractive apt-get install -y steam-installer || echo "aviso: steam-installer indisponível"
+# --- Apenas o kernel mais novo (o live-build pode deixar dois) ---
+atual=$(ls -1 /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||' | sort -V | tail -n1)
+for k in $(ls -1 /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||'); do
+    [ "$k" = "$atual" ] || apt-get purge -y "linux-image-$k" || true
+done
 
 # --- Android: Waydroid (repositório oficial do projeto) ---
 if apt-get install -y curl ca-certificates gnupg; then
@@ -21,7 +18,7 @@ if apt-get install -y curl ca-certificates gnupg; then
 fi
 
 # --- Flatpak + Flathub (Chrome, Brave, Edge, Bottles, Heroic, Discord...) ---
-flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak remote-add --system --if-not-exists flathub /usr/share/vorticis/flathub.flatpakrepo || echo "aviso: flathub não configurado"
 
 # --- Usuários e níveis de acesso ---
 /usr/bin/vorticis-usuarios configurar

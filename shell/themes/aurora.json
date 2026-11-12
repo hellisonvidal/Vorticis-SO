@@ -1,0 +1,27 @@
+{
+  "id": "aurora",
+  "nome": "Aurora",
+  "descricao": "Aurora boreal ondulando no céu noturno, segue o mouse devagar.",
+  "efeito": "aurora",
+  "fundoApp": "#030a16",
+  "fundoEstatico": "linear-gradient(180deg, #06142b 0%, #0b2f3a 55%, #020814 100%)",
+  "cores": {
+    "destaque": "#3ef0a8",
+    "destaqueForte": "#14c98a",
+    "texto": "#eaf6ff",
+    "textoSuave": "#a9c3d9",
+    "painel": "rgba(3, 12, 26, 0.66)",
+    "painelBorda": "rgba(255,255,255,0.14)",
+    "item": "rgba(255,255,255,0.07)",
+    "itemHover": "rgba(255,255,255,0.16)"
+  },
+  "aurora": {
+    "corFundo": "#020814",
+    "cores": [
+      "#2af598",
+      "#08aeea",
+      "#7b5cff"
+    ]
+  },
+  "animado": true
+}

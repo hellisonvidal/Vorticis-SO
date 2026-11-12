@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""vorticis-tela — resoluções, taxa de atualização, escala e múltiplos monitores.
+
+Uso:
+  vorticis-tela listar                         monitores e todos os modos que o hardware oferece
+  vorticis-tela auto [--salvar]                melhor resolução nativa + maior taxa + escala pela densidade (DPI)
+  vorticis-tela definir SAIDA [--resolucao 2560x1440] [--taxa 144] [--escala 1.25]
+                              [--rotacao 0|90|180|270] [--posicao X,Y] [--desligar] [--salvar]
+  vorticis-tela personalizada SAIDA LARGURAxALTURA [--taxa 60] [--salvar]
+                              cria um modo que o monitor não anuncia (EDID incompleto, ultrawide, adaptadores)
+  vorticis-tela espelhar | estender [--salvar]
+  vorticis-tela boot LARGURAxALTURA            resolução do menu de boot e do console (GRUB/kernel)
+
+Usa o protocolo wlr-output-management (wlr-randr) e salva perfis no kanshi, que reaplica a
+configuração automaticamente quando um monitor é conectado.
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+KANSHI = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "kanshi/config"
+
+
+def saidas():
+    if not shutil.which("wlr-randr"):
+        sys.exit("wlr-randr não encontrado (é preciso estar numa sessão Wayland do Vorticis).")
+    r = subprocess.run(["wlr-randr", "--json"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("Não foi possível ler os monitores: " + r.stderr.strip())
+    return json.loads(r.stdout)
+
+
+def modo_atual(s):
+    return next((m for m in s.get("modes", []) if m.get("current")), None)
+
+
+def melhor_modo(s):
+    modos = s.get("modes", [])
+    if not modos:
+        return None
+    preferido = next((m for m in modos if m.get("preferred")), None)
+    if preferido:
+        mesmos = [m for m in modos if (m["width"], m["height"]) == (preferido["width"], preferido["height"])]
+        return max(mesmos, key=lambda m: m["refresh"])
+    return max(modos, key=lambda m: (m["width"] * m["height"], m["refresh"]))
+
+
+def escala_por_dpi(s, modo):
+    fis = s.get("physical_size") or {}
+    larg_mm = fis.get("width") or 0
+    if not larg_mm or not modo:
+        return 1.0
+    ppi = modo["width"] / (larg_mm / 25.4)
+    # Notebooks são vistos mais de perto que monitores: alvo ~ 96 ppi efetivos (110 em telas pequenas)
+    alvo = 110 if larg_mm < 400 else 96
+    escala = ppi / alvo
+    for passo in (1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0):
+        if escala <= passo + 0.12:
+            return passo
+    return 3.0
+
+
+def aplicar(args_por_saida, simular=False):
+    cmd = ["wlr-randr"]
+    for nome, opcoes in args_por_saida.items():
+        cmd += ["--output", nome] + opcoes
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd))
+    if not simular:
+        subprocess.run(cmd, check=True)
+
+
+def salvar_kanshi():
+    """Grava o estado atual como perfil do kanshi (reaplicado ao conectar/desconectar monitores)."""
+    lista = saidas()
+    linhas = []
+    for s in lista:
+        if not s.get("enabled"):
+            linhas.append(f'    output "{s["name"]}" disable')
+            continue
+        m = modo_atual(s)
+        pos = s.get("position", {"x": 0, "y": 0})
+        modo = f'{m["width"]}x{m["height"]}@{m["refresh"]:.3f}Hz' if m else ""
+        linhas.append(f'    output "{s["name"]}" enable mode {modo} position {pos["x"]},{pos["y"]} '
+                      f'scale {s.get("scale", 1)} transform {s.get("transform", "normal")}')
+    nomes = "-".join(sorted(s["name"] for s in lista))
+    perfil = f"profile vorticis-{nomes} {{\n" + "\n".join(linhas) + "\n}\n"
+    existente = KANSHI.read_text() if KANSHI.exists() else ""
+    existente = re.sub(rf"profile vorticis-{re.escape(nomes)} \{{.*?\n\}}\n", "", existente, flags=re.S)
+    KANSHI.parent.mkdir(parents=True, exist_ok=True)
+    KANSHI.write_text(existente + perfil)
+    subprocess.run(["pkill", "-HUP", "kanshi"], capture_output=True)
+    print(f"Configuração salva em {KANSHI}")
+
+
+def cmd_listar(_a):
+    for s in saidas():
+        m = modo_atual(s)
+        estado = f"{m['width']}x{m['height']} @ {m['refresh']:.2f} Hz" if m and s.get("enabled") else "desligado"
+        print(f"\n{s['name']} — {s.get('make', '')} {s.get('model', '')}  [{estado}, escala {s.get('scale', 1)}]")
+        fis = s.get("physical_size") or {}
+        if fis.get("width"):
+            pol = ((fis["width"] ** 2 + fis["height"] ** 2) ** 0.5) / 25.4
+            print(f"   Tamanho: {fis['width']}x{fis['height']} mm ({pol:.1f}\")  ·  escala sugerida: {escala_por_dpi(s, melhor_modo(s))}")
+        vistos = {}
+        for md in s.get("modes", []):
+            chave = (md["width"], md["height"])
+            vistos.setdefault(chave, []).append(md)
+        for (w, h), mds in sorted(vistos.items(), key=lambda kv: -kv[0][0] * kv[0][1]):
+            taxas = ", ".join(f"{x['refresh']:.0f}" + ("*" if x.get("current") else "") + ("⁺" if x.get("preferred") else "")
+                              for x in sorted(mds, key=lambda x: -x["refresh"]))
+            print(f"   {w}x{h:<6} {taxas} Hz")
+    print("\n* = atual   ⁺ = nativo do monitor")
+
+
+def cmd_auto(a):
+    plano = {}
+    x = 0
+    for s in saidas():
+        m = melhor_modo(s)
+        if not m:
+            continue
+        esc = escala_por_dpi(s, m)
+        plano[s["name"]] = ["--on", "--mode", f'{m["width"]}x{m["height"]}@{m["refresh"]:.3f}Hz',
+                            "--scale", str(esc), "--pos", f"{x},0"]
+        print(f"{s['name']}: {m['width']}x{m['height']} @ {m['refresh']:.0f} Hz, escala {esc}")
+        x += int(m["width"] / esc)
+    aplicar(plano, a.simular)
+    if a.salvar and not a.simular:
+        salvar_kanshi()
+
+
+def cmd_definir(a):
+    op = []
+    if a.desligar:
+        op = ["--off"]
+    else:
+        op.append("--on")
+        if a.resolucao:
+            if not re.fullmatch(r"\d+x\d+", a.resolucao):
+                sys.exit("Resolução no formato LARGURAxALTURA, ex.: 1920x1080")
+            op += ["--mode", a.resolucao + (f"@{a.taxa}Hz" if a.taxa else "")]
+        if a.escala:
+            op += ["--scale", str(a.escala)]
+        if a.rotacao is not None:
+            op += ["--transform", {0: "normal", 90: "90", 180: "180", 270: "270"}[a.rotacao]]
+        if a.posicao:
+            op += ["--pos", a.posicao]
+    aplicar({a.saida: op}, a.simular)
+    if a.salvar and not a.simular:
+        salvar_kanshi()
+
+
+def cmd_personalizada(a):
+    if not re.fullmatch(r"\d+x\d+", a.resolucao):
+        sys.exit("Formato: LARGURAxALTURA")
+    aplicar({a.saida: ["--on", "--custom-mode", f"{a.resolucao}@{a.taxa}Hz"]}, a.simular)
+    print("Se a tela ficar preta, aguarde 15 s: use Super+Esc ou desconecte o cabo para voltar.")
+    if a.salvar and not a.simular:
+        salvar_kanshi()
+
+
+def cmd_espelhar(a):
+    lista = [s for s in saidas() if s.get("modes")]
+    if len(lista) < 2:
+        sys.exit("É preciso ter pelo menos dois monitores.")
+    # Maior resolução comum a todos
+    comuns = set.intersection(*[{(m["width"], m["height"]) for m in s["modes"]} for s in lista])
+    if not comuns:
+        sys.exit("Os monitores não têm resolução em comum.")
+    w, h = max(comuns, key=lambda c: c[0] * c[1])
+    aplicar({s["name"]: ["--on", "--mode", f"{w}x{h}", "--pos", "0,0", "--scale", "1"] for s in lista}, a.simular)
+    if a.salvar and not a.simular:
+        salvar_kanshi()
+
+
+def cmd_boot(a):
+    if not re.fullmatch(r"\d+x\d+", a.resolucao):
+        sys.exit("Formato: LARGURAxALTURA")
+    if os.geteuid() != 0:
+        sys.exit("Rode com sudo.")
+    grub = Path("/etc/default/grub")
+    texto = grub.read_text()
+    texto = re.sub(r"^#?GRUB_GFXMODE=.*$", f"GRUB_GFXMODE={a.resolucao},auto", texto, flags=re.M)
+    if "GRUB_GFXMODE=" not in texto:
+        texto += f"\nGRUB_GFXMODE={a.resolucao},auto\n"
+    if "GRUB_GFXPAYLOAD_LINUX" not in texto:
+        texto += "GRUB_GFXPAYLOAD_LINUX=keep\n"
+    grub.write_text(texto)
+    subprocess.run(["update-grub"], check=False)
+    print(f"Menu de boot e console em {a.resolucao} (se o firmware suportar).")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-tela", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("listar").set_defaults(f=cmd_listar)
+    p = sub.add_parser("auto"); p.add_argument("--salvar", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_auto)
+    p = sub.add_parser("definir"); p.add_argument("saida"); p.add_argument("--resolucao"); p.add_argument("--taxa", type=float)
+    p.add_argument("--escala", type=float); p.add_argument("--rotacao", type=int, choices=[0, 90, 180, 270]); p.add_argument("--posicao")
+    p.add_argument("--desligar", action="store_true"); p.add_argument("--salvar", action="store_true"); p.add_argument("--simular", action="store_true")
+    p.set_defaults(f=cmd_definir)
+    p = sub.add_parser("personalizada"); p.add_argument("saida"); p.add_argument("resolucao"); p.add_argument("--taxa", type=float, default=60)
+    p.add_argument("--salvar", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_personalizada)
+    for n in ("espelhar", "estender"):
+        p = sub.add_parser(n); p.add_argument("--salvar", action="store_true"); p.add_argument("--simular", action="store_true")
+        p.set_defaults(f=cmd_espelhar if n == "espelhar" else cmd_auto)
+    p = sub.add_parser("boot"); p.add_argument("resolucao"); p.set_defaults(f=cmd_boot)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vorticis Music</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .conteudo { padding: 0; display: flex; flex-direction: column; }
+    .topo-lista { display: flex; gap: 10px; align-items: center; padding: 16px 20px 8px; flex-wrap: wrap; }
+    .topo-lista h2 { flex: 1; margin: 0; }
+    .faixas { flex: 1; overflow: auto; padding: 0 12px 12px; }
+    .faixa {
+      display: grid; grid-template-columns: 34px 44px 1fr 1fr 60px 34px; align-items: center; gap: 10px;
+      padding: 6px 8px; border-radius: 9px; cursor: default;
+    }
+    .faixa:hover { background: var(--superficie-2); }
+    .faixa.tocando { background: color-mix(in srgb, var(--destaque) 18%, transparent); }
+    .faixa .n { color: var(--texto-suave); text-align: center; font-variant-numeric: tabular-nums; }
+    .faixa .capa, .player .capa { width: 40px; height: 40px; border-radius: 7px; object-fit: cover; background: linear-gradient(135deg, var(--destaque), #052a52); display: grid; place-items: center; font-size: 18px; }
+    .faixa .titulo b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .faixa .titulo small, .faixa .album { color: var(--texto-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .faixa .dur { color: var(--texto-suave); text-align: right; font-variant-numeric: tabular-nums; }
+    .faixa .fav { border: 0; background: none; opacity: .5; }
+    .faixa .fav.on { opacity: 1; }
+    .player {
+      flex-shrink: 0; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(280px, 2fr) minmax(180px, 1fr);
+      gap: 16px; align-items: center; padding: 10px 18px; border-top: 1px solid var(--borda); background: rgba(0, 0, 0, .18);
+    }
+    .player .info { display: flex; gap: 10px; align-items: center; min-width: 0; }
+    .player .info .capa { width: 52px; height: 52px; }
+    .player .info b, .player .info small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .controles { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .controles .botoes { display: flex; gap: 6px; align-items: center; }
+    .tocar { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--destaque-forte); color: #fff; font-size: 18px; }
+    .modo.on { color: var(--destaque); }
+    .progresso { display: flex; gap: 8px; align-items: center; width: 100%; font-size: 12px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+    .progresso input { flex: 1; }
+    .extras { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+    #visual { width: 100%; height: 90px; display: block; }
+    .eq { display: flex; gap: 18px; padding: 12px 20px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--borda); }
+    .eq label { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--texto-suave); }
+    .soltar { border: 2px dashed var(--borda); border-radius: 16px; margin: 20px; }
+    body.arrastando .faixas { outline: 2px dashed var(--destaque); outline-offset: -8px; }
+    @media (max-width: 760px) {
+      .player { grid-template-columns: 1fr; }
+      .extras { justify-content: center; }
+      .faixa { grid-template-columns: 26px 40px 1fr 50px 30px; }
+      .faixa .album { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="cabecalho">
+    <h1><span class="logo-app">🎵</span> Vorticis Music</h1>
+    <span class="espaco"></span>
+    <input id="busca" class="campo" type="search" placeholder="Buscar músicas, artistas, álbuns">
+  </header>
+  <div class="corpo">
+    <nav class="lateral" id="lateral">
+      <h3>Biblioteca</h3>
+      <button data-vista="todas" aria-current="true">🎶 Todas as músicas</button>
+      <button data-vista="artistas">🎤 Artistas</button>
+      <button data-vista="albuns">💿 Álbuns</button>
+      <button data-vista="favoritas">❤️ Favoritas</button>
+      <button data-vista="fila">📜 Fila de reprodução</button>
+      <h3>Adicionar</h3>
+      <button id="add-pasta">📁 Abrir pasta…</button>
+      <button id="add-arquivos">➕ Abrir arquivos…</button>
+      <input id="in-pasta" type="file" webkitdirectory multiple hidden>
+      <input id="in-arquivos" type="file" accept="audio/*,.flac,.opus,.ogg,.m4a" multiple hidden>
+      <h3>Som</h3>
+      <button id="btn-eq">🎚️ Equalizador</button>
+      <button id="btn-visual">🌊 Visualizador</button>
+    </nav>
+    <main class="conteudo">
+      <div class="topo-lista"><h2 id="titulo-vista">Todas as músicas</h2><span class="chip" id="contagem"></span>
+        <button class="botao" id="tocar-tudo">▶ Tocar tudo</button></div>
+      <canvas id="visual" hidden></canvas>
+      <div class="faixas" id="faixas"></div>
+      <div class="eq" id="eq" hidden></div>
+    </main>
+  </div>
+  <footer class="player">
+    <div class="info"><div class="capa" id="p-capa">🎵</div><div style="min-width:0"><b id="p-titulo">Nada tocando</b><small class="suave" id="p-artista">Abra uma pasta de músicas</small></div></div>
+    <div class="controles">
+      <div class="botoes">
+        <button class="icone-botao modo" id="aleatorio" title="Aleatório">🔀</button>
+        <button class="icone-botao" id="anterior" title="Anterior">⏮</button>
+        <button class="tocar" id="tocar" title="Tocar/pausar">▶</button>
+        <button class="icone-botao" id="proxima" title="Próxima">⏭</button>
+        <button class="icone-botao modo" id="repetir" title="Repetir">🔁</button>
+      </div>
+      <div class="progresso"><span id="t-atual">0:00</span><input type="range" id="posicao" min="0" max="1000" value="0"><span id="t-total">0:00</span></div>
+    </div>
+    <div class="extras"><span>🔈</span><input type="range" id="volume" min="0" max="100" value="80" style="width:110px"></div>
+  </footer>
+  <audio id="audio" preload="metadata"></audio>
+  <script src="../comum/app.js"></script>
+  <script src="musica.js"></script>
+</body>
+</html>

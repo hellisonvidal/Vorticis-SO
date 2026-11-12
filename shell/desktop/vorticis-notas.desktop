@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Vorticis Notas
+Comment=Anotações rápidas
+Exec=vorticis-app notas
+Icon=accessories-text-editor
+Categories=Utility;TextEditor;
+Terminal=false
+StartupWMClass=org.vorticis.Notas

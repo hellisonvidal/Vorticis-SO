@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Vorticis Music
+Comment=Ouça suas músicas
+Exec=vorticis-app musica %F
+Icon=multimedia-audio-player
+Categories=AudioVideo;Audio;Player;
+Terminal=false
+StartupWMClass=org.vorticis.Music
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/mp4;audio/aac;audio/x-wav;audio/x-ms-wma;

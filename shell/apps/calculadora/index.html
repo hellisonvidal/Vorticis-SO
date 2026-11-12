@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vorticis Calculadora</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    body { align-items: stretch; }
+    .calc { flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 12px; max-width: 420px; width: 100%; margin: 0 auto; }
+    .visor { text-align: right; padding: 12px 8px; }
+    .visor small { display: block; color: var(--texto-suave); min-height: 20px; font-size: 14px; word-break: break-all; }
+    .visor b { font-size: 40px; font-weight: 300; word-break: break-all; font-variant-numeric: tabular-nums; }
+    .teclas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1; }
+    .teclas button { border: 0; border-radius: 14px; background: var(--superficie-2); font-size: 20px; min-height: 54px; }
+    .teclas button:hover { filter: brightness(1.25); }
+    .teclas .op { background: color-mix(in srgb, var(--destaque) 25%, transparent); }
+    .teclas .igual { background: var(--destaque-forte); color: #fff; }
+    .hist { font-size: 12px; color: var(--texto-suave); max-height: 90px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <header class="cabecalho"><h1><span class="logo-app">🧮</span> Vorticis Calculadora</h1></header>
+  <div class="calc">
+    <div class="hist" id="hist"></div>
+    <div class="visor cartao"><small id="expr"></small><b id="res">0</b></div>
+    <div class="teclas" id="teclas"></div>
+  </div>
+  <script src="../comum/app.js"></script>
+  <script>
+  (function () {
+    const $ = (s) => document.querySelector(s);
+    const T = ["C", "(", ")", "÷", "7", "8", "9", "×", "4", "5", "6", "−", "1", "2", "3", "+", "%", "0", ",", "="];
+    let expr = "";
+    // Avaliador seguro (sem eval): números, + − × ÷ %, parênteses
+    function calcular(s) {
+      const tokens = s.replace(/,/g, ".").match(/\d+(\.\d+)?|[+\-*/%()]/g) || [];
+      let i = 0;
+      const prox = () => tokens[i], pega = () => tokens[i++];
+      function primario() {
+        const t = pega();
+        if (t === "(") { const v = soma(); pega(); return v; }
+        if (t === "-") return -primario();
+        const v = parseFloat(t);
+        if (isNaN(v)) throw new Error("expressão");
+        if (prox() === "%") { pega(); return v / 100; }
+        return v;
+      }
+      function produto() { let v = primario(); while (prox() === "*" || prox() === "/") { const o = pega(), d = primario(); v = o === "*" ? v * d : v / d; } return v; }
+      function soma() { let v = produto(); while (prox() === "+" || prox() === "-") { const o = pega(), d = produto(); v = o === "+" ? v + d : v - d; } return v; }
+      const r = soma();
+      if (i < tokens.length || !isFinite(r)) throw new Error("expressão");
+      return r;
+    }
+    const interno = (s) => s.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-");
+    const formatar = (n) => Number(n.toPrecision(12)).toLocaleString("pt-BR", { maximumFractionDigits: 10 });
+    function atualizar() {
+      $("#expr").textContent = expr;
+      try { $("#res").textContent = expr ? formatar(calcular(interno(expr))) : "0"; } catch (_) { /* parcial */ }
+    }
+    function tecla(t) {
+      if (t === "C") expr = "";
+      else if (t === "⌫") expr = expr.slice(0, -1);
+      else if (t === "=") {
+        try { const r = formatar(calcular(interno(expr))); $("#hist").prepend(Object.assign(document.createElement("div"), { textContent: `${expr} = ${r}` })); expr = r.replace(/\./g, ""); }
+        catch (_) { $("#res").textContent = "Erro"; return; }
+      } else expr += t;
+      atualizar();
+    }
+    $("#teclas").replaceChildren(...T.map((t) => Object.assign(document.createElement("button"), {
+      textContent: t, className: t === "=" ? "igual" : "÷×−+".includes(t) ? "op" : "", onclick: () => tecla(t) })));
+    document.addEventListener("keydown", (e) => {
+      const m = { "*": "×", "/": "÷", "-": "−", "+": "+", Enter: "=", "=": "=", Backspace: "⌫", Escape: "C", ".": ",", ",": ",", "%": "%", "(": "(", ")": ")" };
+      if (/^\d$/.test(e.key)) tecla(e.key); else if (m[e.key]) { e.preventDefault(); tecla(m[e.key]); }
+    });
+  })();
+  </script>
+</body>
+</html>

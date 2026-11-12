@@ -1,0 +1,27 @@
+{
+  "id": "recife",
+  "nome": "Recife",
+  "descricao": "Água turquesa de recife de coral, com destaques corais.",
+  "efeito": "agua",
+  "fundoApp": "#05252b",
+  "fundoEstatico": "radial-gradient(ellipse at 70% 10%, #5ef2e0 0%, #10a5a0 35%, #023b46 100%)",
+  "cores": {
+    "destaque": "#ff8a65",
+    "destaqueForte": "#ff6e40",
+    "texto": "#eaf6ff",
+    "textoSuave": "#a9c3d9",
+    "painel": "rgba(2, 40, 48, 0.62)",
+    "painelBorda": "rgba(255,255,255,0.14)",
+    "item": "rgba(255,255,255,0.07)",
+    "itemHover": "rgba(255,255,255,0.16)"
+  },
+  "agua": {
+    "corFundo": "#012a33",
+    "corMeio": "#12b3ac",
+    "corBrilho": "#d5fff7",
+    "causticas": 0.5,
+    "amortecimento": 0.984,
+    "gotasAmbiente": true
+  },
+  "animado": true
+}

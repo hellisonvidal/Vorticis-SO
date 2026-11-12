@@ -3,3 +3,5 @@ vorticis-shell >/dev/null 2>&1 &
 mako >/dev/null 2>&1 &
 nm-applet --indicator >/dev/null 2>&1 &
 swayidle -w timeout 600 'swaylock -f -c 03214a' before-sleep 'swaylock -f -c 03214a' >/dev/null 2>&1 &
+lxpolkit >/dev/null 2>&1 &
+kanshi >/dev/null 2>&1 &

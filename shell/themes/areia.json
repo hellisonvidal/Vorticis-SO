@@ -1,0 +1,20 @@
+{
+  "id": "areia",
+  "nome": "Areia",
+  "descricao": "Claro e quente, como uma praia. Estático e leve.",
+  "efeito": "estatico",
+  "fundoApp": "#faf5ec",
+  "claro": true,
+  "fundoEstatico": "linear-gradient(160deg, #fff6e5 0%, #f3dfba 50%, #8fc6dc 100%)",
+  "cores": {
+    "destaque": "#0b7fab",
+    "destaqueForte": "#086a8f",
+    "texto": "#2b2215",
+    "textoSuave": "#6b5b45",
+    "painel": "rgba(255, 251, 243, 0.78)",
+    "painelBorda": "rgba(80, 60, 30, 0.16)",
+    "item": "rgba(80, 60, 30, 0.06)",
+    "itemHover": "rgba(11, 127, 171, 0.14)"
+  },
+  "animado": false
+}

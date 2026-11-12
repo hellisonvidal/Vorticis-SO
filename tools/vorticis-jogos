@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""vorticis-jogos — jogos de Windows no Vorticis, incluindo os com anti-cheat.
+
+Uso:
+  vorticis-jogos verificar "NOME DO JOGO"   consulta se o anti-cheat do jogo funciona no Linux
+  vorticis-jogos preparar [--simular]       Steam + Proton, runtimes EAC/BattlEye, Proton-GE, gamemode
+  vorticis-jogos alternativas "NOME"        caminhos para jogos cujo anti-cheat não aceita Linux
+  vorticis-jogos otimizar [--simular]       ajustes de sistema para jogos
+
+Como funciona o anti-cheat no Proton:
+  * Easy Anti-Cheat (EAC) e BattlEye têm suporte oficial ao Proton. Funciona quando o
+    estúdio do jogo ativa esse suporte (ex.: Elden Ring, DayZ, ARK, The Finals).
+  * Anti-cheats de kernel (Riot Vanguard, FACEIT, Ricochet, Javelin...) recusam qualquer
+    sistema que não seja Windows. Nenhuma camada de compatibilidade contorna isso — e
+    tentar burlar leva a banimento. Para esses, o Vorticis oferece jogo em nuvem ou
+    inicialização dupla com Windows.
+
+Fonte dos dados: banco público "Are We Anti-Cheat Yet?" (areweanticheatyet.com).
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import unicodedata
+import urllib.request
+from pathlib import Path
+
+URL_BANCO = "https://raw.githubusercontent.com/AreWeAntiCheatYet/AreWeAntiCheatYet/master/games.json"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "vorticis/anticheat.json"
+STATUS = {
+    "Supported":  ("✔", "Funciona: o anti-cheat foi ativado para Linux/Proton pelo estúdio."),
+    "Running":    ("✔", "Roda: o jogo funciona, mesmo sem anúncio oficial."),
+    "Planned":    ("…", "Suporte planejado pelo estúdio, ainda não disponível."),
+    "Broken":     ("✘", "Não funciona: o anti-cheat bloqueia Linux atualmente."),
+    "Denied":     ("✘", "Negado: o estúdio decidiu bloquear Linux/Steam Deck."),
+}
+KERNEL_AC = ["vanguard", "faceit", "ricochet", "javelin", "xigncode", "nprotect", "gameguard", "mhyprot", "esea"]
+
+# Runtimes oficiais publicados pela Valve na Steam (instalados pela própria Steam)
+RUNTIMES = {"1826330": "Proton EasyAntiCheat Runtime", "1161040": "Proton BattlEye Runtime"}
+
+
+def normalizar(t):
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", " ", t).strip()
+
+
+def banco(atualizar=False):
+    if CACHE.exists() and not atualizar and time.time() - CACHE.stat().st_mtime < 3 * 86400:
+        return json.loads(CACHE.read_text())
+    try:
+        with urllib.request.urlopen(URL_BANCO, timeout=20) as r:
+            dados = json.loads(r.read().decode())
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps(dados))
+        return dados
+    except Exception as e:
+        if CACHE.exists():
+            print(f"(sem internet: usando dados salvos — {e})", file=sys.stderr)
+            return json.loads(CACHE.read_text())
+        sys.exit(f"Não foi possível consultar o banco de anti-cheat: {e}")
+
+
+def procurar(nome):
+    alvo = normalizar(nome)
+    jogos = banco()
+    exatos = [j for j in jogos if normalizar(j.get("name", "")) == alvo]
+    if exatos:
+        return exatos
+    palavras = alvo.split()
+    return [j for j in jogos if all(p in normalizar(j.get("name", "")) for p in palavras)][:8]
+
+
+def cmd_verificar(a):
+    achados = procurar(a.jogo)
+    if not achados:
+        print(f"'{a.jogo}' não consta no banco de jogos com anti-cheat.")
+        print("Provavelmente não usa anti-cheat: confira a nota no protondb.com e jogue pela Steam (Proton).")
+        return
+    for j in achados:
+        st = j.get("status", "?")
+        icone, texto = STATUS.get(st, ("?", st))
+        acs = ", ".join(j.get("anticheats", [])) or "desconhecido"
+        print(f"\n{icone} {j.get('name')}\n   Anti-cheat: {acs}\n   {texto}")
+        if j.get("notes"):
+            for n in j["notes"][:2]:
+                nota = n[0] if isinstance(n, list) else n
+                print(f"   Nota: {nota}")
+        if st in ("Broken", "Denied") or any(k in acs.lower() for k in KERNEL_AC):
+            print(f"   → Veja: vorticis-jogos alternativas \"{j.get('name')}\"")
+        elif st in ("Supported", "Running"):
+            print("   → Instale pela Steam (ou Heroic, para Epic). O Proton cuida do anti-cheat automaticamente.")
+
+
+def cmd_alternativas(a):
+    print(f"Jogos com anti-cheat que bloqueia Linux ({a.jogo}):\n")
+    print("1. Jogo em nuvem (funciona em qualquer PC Vorticis, anti-cheat roda no servidor):")
+    print("     • GeForce NOW  — vorticis-navegadores abrir https://play.geforcenow.com")
+    print("     • Xbox Cloud   — vorticis-navegadores abrir https://www.xbox.com/play")
+    print("     • Boosteroid   — vorticis-navegadores abrir https://cloud.boosteroid.com")
+    print("2. Inicialização dupla (dual boot): mantenha o Windows numa partição só para esses jogos.")
+    print("   O instalador do Vorticis oferece 'Instalar ao lado do Windows' e o menu de boot lembra a última escolha.")
+    print("3. Versão mobile pelo Android (Waydroid) — alguns jogos têm, mas muitos também bloqueiam contêineres.")
+    print("\nObs.: VMs com Windows normalmente são detectadas e bloqueadas por anti-cheats de kernel; não recomendamos.")
+
+
+def rodar(cmd, simular, root=False):
+    if root and os.geteuid() != 0:
+        cmd = (["pkexec"] if shutil.which("pkexec") else ["sudo"]) + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd))
+    return 0 if simular else subprocess.run(cmd).returncode
+
+
+def cmd_preparar(a):
+    rodar(["dpkg", "--add-architecture", "i386"], a.simular, root=True)
+    rodar(["apt-get", "update"], a.simular, root=True)
+    rodar(["apt-get", "install", "-y", "steam-installer", "steam-devices", "gamemode", "mangohud",
+           "mesa-vulkan-drivers", "mesa-vulkan-drivers:i386", "libvulkan1:i386"], a.simular, root=True)
+    for app in ("com.heroicgameslauncher.hgl", "net.davidotek.pupgui2", "net.lutris.Lutris"):
+        rodar(["flatpak", "install", "-y", "--noninteractive", "flathub", app], a.simular)
+    print("\nNa Steam: Configurações → Compatibilidade → 'Ativar Steam Play para todos os títulos'.")
+    print("Os runtimes de anti-cheat são baixados pela Steam automaticamente ao abrir um jogo que precise:")
+    for i, n in RUNTIMES.items():
+        print(f"   • {n} (steam://install/{i})")
+    if not a.simular and shutil.which("steam"):
+        for i in RUNTIMES:
+            subprocess.Popen(["steam", f"steam://install/{i}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("Proton-GE (mais correções para jogos fora da Steam): abra o ProtonUp-Qt e instale a versão mais recente.")
+
+
+def cmd_otimizar(a):
+    conteudo = ("# Gerado por vorticis-jogos\nvm.max_map_count = 2147483642\n"
+                "kernel.split_lock_mitigate = 0\n")
+    destino = Path("/etc/sysctl.d/95-vorticis-jogos.conf")
+    print(("[simulação] " if a.simular else "→ ") + f"escrever {destino}")
+    if not a.simular:
+        if os.geteuid() != 0:
+            sys.exit("Rode com sudo.")
+        destino.write_text(conteudo)
+        subprocess.run(["sysctl", "--system"], stdout=subprocess.DEVNULL)
+    conf_mangohud = Path.home() / ".config/MangoHud/MangoHud.conf"
+    print(("[simulação] " if a.simular else "→ ") + f"escrever {conf_mangohud}")
+    if not a.simular:
+        conf_mangohud.parent.mkdir(parents=True, exist_ok=True)
+        conf_mangohud.write_text("fps\nframetime\ncpu_temp\ngpu_temp\nram\nvram\nposition=top-left\ntoggle_hud=Shift_R+F12\n")
+    print("Dica: nas opções de inicialização do jogo na Steam use:  gamemoderun mangohud %command%")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-jogos", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("verificar"); p.add_argument("jogo"); p.set_defaults(f=cmd_verificar)
+    p = sub.add_parser("alternativas"); p.add_argument("jogo"); p.set_defaults(f=cmd_alternativas)
+    for n, f in (("preparar", cmd_preparar), ("otimizar", cmd_otimizar)):
+        p = sub.add_parser(n); p.add_argument("--simular", action="store_true"); p.set_defaults(f=f)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

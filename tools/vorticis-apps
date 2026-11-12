@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""vorticis-apps — gerenciador de aplicativos unificado (apt, Flatpak, Android, Windows).
+
+Uso:
+  vorticis-apps catalogo [--json]            catálogo da Central de Apps com status de instalação
+  vorticis-apps buscar TERMO [--json]        busca no catálogo, no Flathub e nos repositórios Debian
+  vorticis-apps instalar ALVO [--simular]    ALVO = id do catálogo, flatpak:ID, apt:PACOTE ou arquivo
+  vorticis-apps remover ALVO [--simular]
+  vorticis-apps instalados [--json]          apps instalados de todas as fontes
+  vorticis-apps atualizacoes [--json]        atualizações pendentes
+  vorticis-apps atualizar [--simular]        atualiza sistema, Flatpaks, Android e firmware
+
+A interface gráfica (Central de Apps) usa este mesmo comando por baixo.
+"""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+CATALOGOS = [AQUI.parent / "shell/apps/central/catalogo.json", Path("/usr/share/vorticis/shell/apps/central/catalogo.json")]
+COMPAT = str(AQUI / "vorticis-compat") if (AQUI / "vorticis-compat").exists() else "vorticis-compat"
+WINE = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "vorticis/wine"
+
+
+def tem(b):
+    return shutil.which(b) is not None
+
+
+def saida(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=120).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def catalogo():
+    for c in CATALOGOS:
+        if c.exists():
+            return json.loads(c.read_text())
+    return {"categorias": [], "apps": []}
+
+
+def flatpaks_instalados():
+    if not tem("flatpak"):
+        return {}
+    r = {}
+    for linha in saida(["flatpak", "list", "--app", "--columns=application,name,version,installation"]).splitlines():
+        p = linha.split("\t")
+        if p and p[0]:
+            r[p[0]] = {"nome": p[1] if len(p) > 1 else p[0], "versao": p[2] if len(p) > 2 else "", "fonte": "flatpak:" + p[0]}
+    return r
+
+
+def apt_instalados(nomes):
+    if not tem("dpkg-query") or not nomes:
+        return set()
+    ok = set()
+    for linha in saida(["dpkg-query", "-W", "-f=${Package} ${db:Status-Status}\n"] + list(nomes)).splitlines():
+        p = linha.split()
+        if len(p) == 2 and p[1] == "installed":
+            ok.add(p[0])
+    return ok
+
+
+def esta_instalado(app, flat, apt):
+    tipo, _, alvo = app["fonte"].partition(":")
+    if tipo == "vorticis":
+        return True
+    if tipo == "flatpak":
+        return alvo in flat
+    if tipo == "apt":
+        return alvo in apt
+    if app["id"] == "android":
+        return tem("waydroid")
+    if app["id"] == "windows-vm":
+        return tem("quickemu")
+    return False
+
+
+def cmd_catalogo(a):
+    cat = catalogo()
+    flat = flatpaks_instalados()
+    apt = apt_instalados({x["fonte"][4:] for x in cat["apps"] if x["fonte"].startswith("apt:")})
+    for app in cat["apps"]:
+        app["instalado"] = esta_instalado(app, flat, apt)
+    if a.json:
+        print(json.dumps(cat, ensure_ascii=False))
+        return
+    for c in cat["categorias"]:
+        print(f"\n{c}")
+        for app in (x for x in cat["apps"] if x["categoria"] == c):
+            print(f"  {'✔' if app['instalado'] else ' '} {app['id']:<16} {app['nome']:<28} {app['descricao'][:60]}")
+
+
+def resolver(alvo):
+    """Converte id do catálogo em fonte (flatpak:/apt:/compat:/web:/vorticis:)."""
+    if ":" in alvo or Path(alvo).exists():
+        return alvo
+    for app in catalogo()["apps"]:
+        if app["id"] == alvo:
+            return app["fonte"]
+    sys.exit(f"'{alvo}' não está no catálogo. Use flatpak:ID ou apt:PACOTE (veja 'vorticis-apps buscar').")
+
+
+def rodar(cmd, simular, root=False):
+    if root and os.geteuid() != 0:
+        cmd = (["pkexec"] if tem("pkexec") else ["sudo"]) + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd), flush=True)
+    return 0 if simular else subprocess.run(cmd).returncode
+
+
+def cmd_instalar(a):
+    fonte = resolver(a.alvo)
+    tipo, _, alvo = fonte.partition(":")
+    if Path(a.alvo).exists():
+        return sys.exit(rodar([COMPAT, "instalar", a.alvo] + (["--simular"] if a.simular else []), False))
+    if tipo == "flatpak":
+        codigo = rodar(["flatpak", "install", "-y", "--noninteractive", "--system", "flathub", alvo], a.simular, root=True)
+    elif tipo == "apt":
+        codigo = rodar(["apt-get", "install", "-y", alvo], a.simular, root=True)
+    elif tipo == "compat":
+        codigo = rodar([COMPAT] + alvo.split() + (["--simular"] if a.simular else []), False)
+    elif tipo == "web":
+        codigo = rodar(["xdg-open", alvo], a.simular)
+    elif tipo == "vorticis":
+        print("Este app já faz parte do Vorticis SO.")
+        codigo = 0
+    else:
+        sys.exit(f"Fonte desconhecida: {fonte}")
+    sys.exit(codigo)
+
+
+def cmd_remover(a):
+    fonte = resolver(a.alvo)
+    tipo, _, alvo = fonte.partition(":")
+    if tipo == "flatpak":
+        codigo = rodar(["flatpak", "uninstall", "-y", "--noninteractive", alvo], a.simular, root=True)
+    elif tipo == "apt":
+        codigo = rodar(["apt-get", "remove", "-y", alvo], a.simular, root=True)
+    elif tipo == "android":
+        codigo = rodar(["waydroid", "app", "remove", alvo], a.simular)
+    elif tipo == "wine":
+        destino = WINE / alvo
+        print(("[simulação] " if a.simular else "→ ") + f"apagar {destino} e atalho")
+        if not a.simular:
+            shutil.rmtree(destino, ignore_errors=True)
+            (Path.home() / f".local/share/applications/vorticis-{alvo}.desktop").unlink(missing_ok=True)
+        codigo = 0
+    elif tipo == "vorticis":
+        sys.exit("Apps do sistema Vorticis não podem ser removidos.")
+    else:
+        sys.exit(f"Não sei remover: {fonte}")
+    sys.exit(codigo)
+
+
+def cmd_instalados(a):
+    lista = [{"nome": v["nome"], "versao": v["versao"], "fonte": v["fonte"], "tipo": "Flatpak"} for v in flatpaks_instalados().values()]
+    if tem("apt-mark"):
+        manuais = saida(["apt-mark", "showmanual"]).split()
+        cat_apt = {x["fonte"][4:]: x["nome"] for x in catalogo()["apps"] if x["fonte"].startswith("apt:")}
+        for p in manuais:
+            if p in cat_apt:
+                lista.append({"nome": cat_apt[p], "versao": "", "fonte": "apt:" + p, "tipo": "Sistema"})
+    if WINE.exists():
+        for d in sorted(WINE.iterdir()):
+            info = d / "vorticis.json"
+            nome = json.loads(info.read_text()).get("nome", d.name) if info.exists() else d.name
+            lista.append({"nome": nome, "versao": "", "fonte": "wine:" + d.name, "tipo": "Windows"})
+    if tem("waydroid"):
+        atual = {}
+        for linha in saida(["waydroid", "app", "list"]).splitlines():
+            if linha.startswith("Name:"):
+                atual = {"nome": linha.split(":", 1)[1].strip(), "versao": "", "tipo": "Android"}
+            elif linha.startswith("packageName:") and atual:
+                atual["fonte"] = "android:" + linha.split(":", 1)[1].strip()
+                lista.append(atual)
+                atual = {}
+    if a.json:
+        print(json.dumps(lista, ensure_ascii=False))
+    else:
+        for x in lista:
+            print(f"  [{x['tipo']:<8}] {x['nome']:<32} {x['versao']:<14} {x['fonte']}")
+
+
+def cmd_atualizacoes(a):
+    lista = []
+    if tem("apt"):
+        for linha in saida(["apt", "list", "--upgradable"]).splitlines():
+            if "/" in linha and "[" in linha:
+                nome = linha.split("/")[0]
+                versao = linha.split()[1] if len(linha.split()) > 1 else ""
+                lista.append({"nome": nome, "versao": versao, "tipo": "Sistema"})
+    if tem("flatpak"):
+        for linha in saida(["flatpak", "remote-ls", "--updates", "--app", "--columns=name,application,version"]).splitlines():
+            p = linha.split("\t")
+            if len(p) >= 2:
+                lista.append({"nome": p[0], "versao": p[2] if len(p) > 2 else "", "tipo": "Flatpak"})
+    if tem("fwupdmgr"):
+        r = saida(["fwupdmgr", "get-updates", "--json"])
+        try:
+            for d in json.loads(r).get("Devices", []):
+                for rel in d.get("Releases", [])[:1]:
+                    lista.append({"nome": d.get("Name", "Firmware"), "versao": rel.get("Version", ""), "tipo": "Firmware"})
+        except (ValueError, AttributeError):
+            pass
+    if a.json:
+        print(json.dumps(lista, ensure_ascii=False))
+    else:
+        print(f"{len(lista)} atualização(ões) disponível(is)")
+        for x in lista:
+            print(f"  [{x['tipo']:<8}] {x['nome']} {x['versao']}")
+
+
+def cmd_atualizar(a):
+    rodar(["apt-get", "update"], a.simular, root=True)
+    rodar(["apt-get", "full-upgrade", "-y"], a.simular, root=True)
+    if tem("flatpak") or a.simular:
+        rodar(["flatpak", "update", "-y", "--noninteractive"], a.simular, root=True)
+        rodar(["flatpak", "uninstall", "--unused", "-y", "--noninteractive"], a.simular, root=True)
+    if tem("waydroid") or a.simular:
+        rodar(["waydroid", "upgrade"], a.simular, root=True)
+    if tem("fwupdmgr") or a.simular:
+        rodar(["fwupdmgr", "update", "-y", "--no-reboot-check"], a.simular, root=True)
+    print("Sistema atualizado.")
+
+
+def cmd_buscar(a):
+    termo = a.termo.lower()
+    res = [dict(x, origem="Catálogo Vorticis") for x in catalogo()["apps"]
+           if termo in (x["nome"] + " " + x["descricao"] + " " + x["categoria"]).lower()]
+    if tem("flatpak"):
+        for linha in saida(["flatpak", "search", "--columns=name,description,application", a.termo]).splitlines()[:15]:
+            p = linha.split("\t")
+            if len(p) >= 3 and not any(r["fonte"] == "flatpak:" + p[2] for r in res):
+                res.append({"id": "flatpak:" + p[2], "nome": p[0], "descricao": p[1], "fonte": "flatpak:" + p[2], "origem": "Flathub", "icone": "📦"})
+    if tem("apt-cache"):
+        for linha in saida(["apt-cache", "search", "--names-only", a.termo]).splitlines()[:15]:
+            nome, _, desc = linha.partition(" - ")
+            res.append({"id": "apt:" + nome, "nome": nome, "descricao": desc, "fonte": "apt:" + nome, "origem": "Debian", "icone": "🧩"})
+    if a.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        for r in res:
+            print(f"  {r.get('id', r['fonte']):<40} {r['nome']:<28} ({r['origem']}) {r['descricao'][:50]}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-apps", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for n, f in (("catalogo", cmd_catalogo), ("instalados", cmd_instalados), ("atualizacoes", cmd_atualizacoes)):
+        p = sub.add_parser(n); p.add_argument("--json", action="store_true"); p.set_defaults(f=f)
+    p = sub.add_parser("buscar"); p.add_argument("termo"); p.add_argument("--json", action="store_true"); p.set_defaults(f=cmd_buscar)
+    for n, f in (("instalar", cmd_instalar), ("remover", cmd_remover)):
+        p = sub.add_parser(n); p.add_argument("alvo"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=f)
+    p = sub.add_parser("atualizar"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_atualizar)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

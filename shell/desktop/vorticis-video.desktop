@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Vorticis Video Player
+Comment=Assista a vídeos e filmes
+Exec=vorticis-app video %F
+Icon=multimedia-video-player
+Categories=AudioVideo;Video;Player;
+Terminal=false
+StartupWMClass=org.vorticis.Video
+MimeType=video/mp4;video/x-matroska;video/webm;video/x-msvideo;video/quicktime;video/ogg;video/mpeg;video/x-ms-wmv;video/x-flv;video/3gpp;

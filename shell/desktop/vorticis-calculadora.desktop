@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Vorticis Calculadora
+Comment=Calculadora
+Exec=vorticis-app calculadora
+Icon=accessories-calculator
+Categories=Utility;Calculator;
+Terminal=false
+StartupWMClass=org.vorticis.Calculadora

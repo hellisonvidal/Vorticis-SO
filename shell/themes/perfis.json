@@ -1,7 +1,7 @@
 {
-  "basico":   { "nome": "Básico",   "icone": "🏠", "fixados": ["navegador", "arquivos", "musica", "fotos", "loja"], "barra": { "rotulos": true,  "tamanho": "grande" } },
-  "trabalho": { "nome": "Trabalho", "icone": "💼", "fixados": ["navegador", "arquivos", "escritorio", "email", "agenda", "terminal"], "barra": { "rotulos": false, "tamanho": "medio" } },
-  "gamer":    { "nome": "Gamer",    "icone": "🎮", "fixados": ["steam", "heroic", "lutris", "android", "discord", "navegador"], "barra": { "rotulos": false, "tamanho": "medio", "desempenho": true } },
-  "dev":      { "nome": "Desenvolvedor", "icone": "🧑‍💻", "fixados": ["terminal", "codigo", "navegador", "arquivos", "contêineres", "monitor"], "barra": { "rotulos": false, "tamanho": "pequeno" } },
-  "infantil": { "nome": "Infantil", "icone": "🧸", "fixados": ["jogos-educativos", "desenho", "navegador-seguro", "musica"], "barra": { "rotulos": true,  "tamanho": "grande" } }
+  "basico":   { "nome": "Básico",   "icone": "🏠", "fixados": ["navegador", "arquivos", "musica", "video", "central", "configuracoes"], "barra": { "rotulos": true,  "tamanho": "grande" } },
+  "trabalho": { "nome": "Trabalho", "icone": "💼", "fixados": ["navegador", "arquivos", "escritorio", "email", "agenda", "notas", "calculadora"], "barra": { "rotulos": false, "tamanho": "medio" } },
+  "gamer":    { "nome": "Gamer",    "icone": "🎮", "fixados": ["steam", "heroic", "lutris", "android", "discord", "monitor", "navegador"], "barra": { "rotulos": false, "tamanho": "medio", "desempenho": true } },
+  "dev":      { "nome": "Desenvolvedor", "icone": "🧑‍💻", "fixados": ["terminal", "codigo", "navegador", "arquivos", "conteineres", "monitor"], "barra": { "rotulos": false, "tamanho": "pequeno" } },
+  "infantil": { "nome": "Infantil", "icone": "🧸", "fixados": ["jogos-educativos", "desenho", "navegador-seguro", "musica", "video"], "barra": { "rotulos": true,  "tamanho": "grande" } }
 }

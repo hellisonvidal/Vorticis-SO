@@ -1,0 +1,27 @@
+{
+  "id": "neon",
+  "nome": "Neon",
+  "descricao": "Aurora em rosa e ciano, visual futurista.",
+  "efeito": "aurora",
+  "fundoApp": "#0d0516",
+  "fundoEstatico": "linear-gradient(135deg, #1a0633 0%, #0b0320 60%, #04121f 100%)",
+  "cores": {
+    "destaque": "#ff4fd8",
+    "destaqueForte": "#c400ff",
+    "texto": "#eaf6ff",
+    "textoSuave": "#a9c3d9",
+    "painel": "rgba(18, 6, 32, 0.66)",
+    "painelBorda": "rgba(255,255,255,0.14)",
+    "item": "rgba(255,255,255,0.07)",
+    "itemHover": "rgba(255,255,255,0.16)"
+  },
+  "aurora": {
+    "corFundo": "#07020f",
+    "cores": [
+      "#ff2fd0",
+      "#00e5ff",
+      "#7a00ff"
+    ]
+  },
+  "animado": true
+}
