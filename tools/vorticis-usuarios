@@ -85,9 +85,20 @@ find "$casa" -mindepth 1 -delete
 cp -a /etc/skel/. "$casa"/ && chown -R "$PAM_USER": "$casa"
 """
 
+PAM_PERFIL = """Name: Vorticis (horário de contas infantis e limpeza do convidado)
+Default: yes
+Priority: 0
+Account-Type: Additional
+Account:
+	required pam_time.so
+Session-Type: Additional
+Session:
+	optional pam_exec.so /usr/lib/vorticis/limpar-convidado
+"""
+
 ARQ_POLKIT = Path("/etc/polkit-1/rules.d/50-vorticis.rules")
 ARQ_LIMPEZA = Path("/usr/lib/vorticis/limpar-convidado")
-ARQ_PAM = Path("/etc/pam.d/common-session")
+ARQ_PAM = Path("/usr/share/pam-configs/vorticis")
 ARQ_TEMPO = Path("/etc/security/time.conf")
 ARQ_INFANTIL = Path("/etc/vorticis/infantil-uids")
 ARQ_PERFIL = Path("/etc/vorticis/usuarios")
@@ -175,9 +186,9 @@ def cmd_configurar(a):
             ex.cmd(["groupadd", "--system", g])
     ex.escrever(ARQ_POLKIT, POLKIT)
     ex.escrever(ARQ_LIMPEZA, LIMPAR_CONVIDADO, 0o755)
-    ex.acrescentar_linha(ARQ_PAM, f"session optional pam_exec.so {ARQ_LIMPEZA}", str(ARQ_LIMPEZA))
-    ex.acrescentar_linha(Path("/etc/pam.d/common-account"),
-                         "account required pam_time.so", "pam_time.so")
+    # Perfil do pam-auth-update: sobrevive a atualizações do PAM (editar common-* diretamente não).
+    ex.escrever(ARQ_PAM, PAM_PERFIL)
+    ex.cmd(["pam-auth-update", "--package", "--enable", "vorticis"], checar=False)
     print("Configuração de níveis de acesso concluída.")
 
 

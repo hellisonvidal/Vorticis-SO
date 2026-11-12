@@ -1,0 +1,23 @@
+#!/bin/sh
+# live-config: no pen-drive (modo live), entra direto na área de trabalho Vorticis
+# com o usuário "vorticis", sem pedir senha. No sistema instalado este script não roda.
+# O usuário live é o primeiro usuário comum (UID 1000), criado pelo user-setup;
+# como reserva, lê "username=" da linha de comando do kernel.
+USUARIO="$(getent passwd 1000 | cut -d: -f1)"
+if [ -z "$USUARIO" ]; then
+    USUARIO="$(sed -n 's/.*username=\([^ ]*\).*/\1/p' /proc/cmdline)"
+fi
+USUARIO="${USUARIO:-vorticis}"
+grep -q '^\[initial_session\]' /etc/greetd/config.toml && exit 0
+cat >> /etc/greetd/config.toml <<CONF
+
+[initial_session]
+command = "labwc"
+user = "$USUARIO"
+CONF
+# Atalho do instalador na área de trabalho do live
+install -d "/home/$USUARIO/Área de Trabalho"
+if [ -f /usr/share/applications/calamares.desktop ]; then
+    cp /usr/share/applications/calamares.desktop "/home/$USUARIO/Área de Trabalho/Instalar Vorticis.desktop"
+fi
+chown -R "$USUARIO:" "/home/$USUARIO" 2>/dev/null || true

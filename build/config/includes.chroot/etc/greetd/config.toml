@@ -1,5 +1,5 @@
 [terminal]
-vt = 1
+vt = 7
 
 [default_session]
 command = "tuigreet --time --remember --asterisks --greeting 'Bem-vindo ao Vorticis SO' --cmd labwc"

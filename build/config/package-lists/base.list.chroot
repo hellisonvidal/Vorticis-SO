@@ -24,3 +24,4 @@ sudo
 polkitd
 bash-completion
 python3
+systemd-oomd

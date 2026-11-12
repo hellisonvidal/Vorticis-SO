@@ -41,8 +41,14 @@ lb config \
     --memtest none
 
 # Configuração versionada (listas de pacotes, hooks, arquivos extras)
-rm -rf config/package-lists config/hooks config/includes.chroot config/archives
+rm -rf config/package-lists config/hooks/live config/includes.chroot config/archives config/bootloaders
 cp -a "$AQUI/config/." config/
+# O live-build só executa config/hooks/live/* se config/hooks/normal/ também tiver hooks:
+# usa os hooks de limpeza padrão do próprio live-build.
+mkdir -p config/hooks/normal
+if [ -z "$(ls config/hooks/normal 2>/dev/null)" ]; then
+    for h in /usr/share/live/build/hooks/normal/*.chroot; do ln -s "$h" config/hooks/normal/; done
+fi
 
 # Componentes próprios do Vorticis → dentro do sistema
 INC=config/includes.chroot
