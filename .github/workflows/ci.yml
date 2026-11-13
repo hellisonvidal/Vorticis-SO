@@ -11,6 +11,10 @@ on:
         description: "Gerar a ISO (artefato do workflow)"
         type: boolean
         default: false
+      publicar_versao:
+        description: "Publicar release com esta versão (ex.: 0.2). Vazio = só artefato"
+        type: string
+        default: ""
 
 jobs:
   verificar:
@@ -38,7 +42,7 @@ jobs:
         run: for f in shell/themes/*.json shell/apps/central/catalogo.json tools/compat/receitas.json; do python3 -m json.tool "$f" > /dev/null; done
 
   iso:
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.gerar_iso)
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.gerar_iso || inputs.publicar_versao != ''))
     needs: verificar
     runs-on: ubuntu-latest
     permissions:
@@ -52,7 +56,8 @@ jobs:
           df -h /
       - name: Gerar a ISO (Debian 13 + live-build, contêiner privilegiado)
         run: |
-          VERSAO="${GITHUB_REF_NAME#v}"
+          VERSAO="${{ inputs.publicar_versao }}"
+          [ -n "$VERSAO" ] || VERSAO="${GITHUB_REF_NAME#v}"
           case "$VERSAO" in [0-9]*) ;; *) VERSAO="0.2-teste" ;; esac
           echo "VERSAO=$VERSAO" >> "$GITHUB_ENV"
           sudo docker run --rm --privileged -v "$PWD":/src -w /src -e VORTICIS_VERSAO="$VERSAO" \
@@ -68,15 +73,17 @@ jobs:
             cd build && split -b 1900M -d "vorticis-${VERSAO}-amd64.iso" "vorticis-${VERSAO}-amd64.iso.parte" && rm "vorticis-${VERSAO}-amd64.iso"
           fi
       - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.publicar_versao == '' }}
         with:
           name: vorticis-iso
           path: build/vorticis-*
           retention-days: 7
       - name: Publicar release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publicar_versao != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSAO }}
+          target_commitish: ${{ github.sha }}
           name: Vorticis SO ${{ env.VERSAO }}
           body_path: docs/NOTAS-DA-VERSAO.md
           files: |
