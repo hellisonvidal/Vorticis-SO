@@ -32,7 +32,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gdk, GLib, Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
 
 RAIZ = Path(os.environ.get("VORTICIS_SHELL_DIR", "/usr/share/vorticis/shell"))
 SEM_GPU = os.environ.get("VORTICIS_SEM_GPU") == "1" or not list(Path("/dev/dri").glob("renderD*"))
@@ -217,6 +217,12 @@ def ativar(app):
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     for modo in ("papel", "barra"):
         CAMADAS[modo] = Superficie(modo)
+    # Ações para atalhos de teclado do compositor (tecla Super abre o menu):
+    #   gapplication action org.vorticis.Shell menu
+    for nome, painel in (("menu", "menu"), ("personalizar", "config")):
+        acao = Gio.SimpleAction.new(nome, None)
+        acao.connect("activate", lambda _a, _p, painel=painel: abrir_painel({"painel": painel}))
+        app.add_action(acao)
 
 
 if __name__ == "__main__":

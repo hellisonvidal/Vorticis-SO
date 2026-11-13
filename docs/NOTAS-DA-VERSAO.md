@@ -40,9 +40,17 @@ Confira o arquivo `.sha256` antes de gravar.
   personalizados, espelhar/estender e perfis que se reaplicam ao conectar monitores.
 - **macOS retirado**: foco em Linux, Windows e Android.
 
+## Atalhos
+
+- **Super (tecla Windows)**: abre o menu · **Super+P**: personalização · **Super+Enter**: terminal
+- **Super+E**: arquivos · **Super+L**: bloquear · **Alt+Tab**: alternar janelas · **Print**: captura de tela
+
 ## Limitações conhecidas
 
 - Jogos com anti-cheat de kernel (Valorant, Call of Duty, FACEIT…) não rodam — limitação dos
   próprios jogos.
 - Wine, Steam e Waydroid baixam na primeira utilização (requer internet).
 - A barra que se oculta automaticamente não reserva espaço; em telas touch, use a borda.
+- Testado em máquina virtual sem aceleração 3D (boot, login automático do modo live, área de
+  trabalho, menu). Sem GPU o Vorticis desenha tudo por software: funciona, mas a água animada
+  fica mais lenta. Em hardware real com driver de vídeo, a aceleração é usada automaticamente.

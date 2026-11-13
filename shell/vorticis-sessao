@@ -1,21 +1,46 @@
 #!/bin/sh
 # vorticis-sessao — inicia a sessão gráfica do Vorticis SO (chamado pelo greetd).
-# Tenta o compositor com aceleração por GPU; se ele não subir (VM sem 3D, GPU sem driver),
-# repete com renderização por software para o usuário nunca ficar com a tela preta.
+#
+# * Espera o dispositivo de vídeo aparecer (no boot do pen-drive o login automático
+#   pode começar antes de o driver de vídeo terminar de carregar).
+# * Tenta o compositor com aceleração por GPU; se ele não subir (VM sem 3D, GPU sem
+#   driver), usa renderização por software para nunca deixar a tela preta.
+# * Se o compositor cair logo ao iniciar, tenta de novo algumas vezes.
 export XDG_CURRENT_DESKTOP=Vorticis:wlroots
 export XDG_SESSION_DESKTOP=vorticis
 export MOZ_ENABLE_WAYLAND=1
 export QT_QPA_PLATFORM="wayland;xcb"
 
-inicio=$(date +%s)
-if ls /dev/dri/renderD* >/dev/null 2>&1; then
+registrar() { logger -t vorticis-sessao "$*" 2>/dev/null || true; }
+
+i=0
+while [ $i -lt 20 ] && ! ls /dev/dri/card* >/dev/null 2>&1; do
+    sleep 0.5; i=$((i + 1))
+done
+
+usar_software() {
+    export WLR_RENDERER=pixman
+    export VORTICIS_SEM_GPU=1
+    export WEBKIT_DISABLE_DMABUF_RENDERER=1
+    export LIBGL_ALWAYS_SOFTWARE=1
+}
+
+ls /dev/dri/renderD* >/dev/null 2>&1 || usar_software
+
+tentativa=1
+while [ $tentativa -le 3 ]; do
+    inicio=$(date +%s)
     labwc "$@" && exit 0
-    # Saiu com erro em menos de 20 s: a aceleração falhou.
-    [ $(( $(date +%s) - inicio )) -gt 20 ] && exit 1
-    logger -t vorticis-sessao "labwc falhou com GPU; usando renderização por software"
-fi
-export WLR_RENDERER=pixman
-export VORTICIS_SEM_GPU=1
-export WEBKIT_DISABLE_DMABUF_RENDERER=1
-export LIBGL_ALWAYS_SOFTWARE=1
-exec labwc "$@"
+    duracao=$(( $(date +%s) - inicio ))
+    # Encerrou com erro depois de funcionar um tempo: não é falha de inicialização.
+    [ "$duracao" -gt 20 ] && exit 1
+    registrar "labwc encerrou em ${duracao}s (tentativa $tentativa)"
+    if [ -z "$VORTICIS_SEM_GPU" ]; then
+        registrar "usando renderização por software"
+        usar_software
+    else
+        sleep 2
+    fi
+    tentativa=$((tentativa + 1))
+done
+exit 1
