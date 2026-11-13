@@ -23,6 +23,8 @@ Ele acompanha o tema escolhido, mas pode ser trocado à parte em **Personalizaç
 na tela de inicialização (Plymouth), no instalador (Calamares), no pen-drive (ícone da unidade no Windows) e
 nos ícones do sistema.
 
+![Escolha do ícone do sistema: formato e cores independentes do tema](docs/captura-icones.png)
+
 ## Baixar e instalar
 
 Versões prontas ficam em **[Releases](https://github.com/hellisonvidal/Vorticis-SO/releases)** —
