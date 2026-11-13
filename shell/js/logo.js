@@ -82,8 +82,10 @@
   }
 
   const DESENHOS = {
-    vortice(id, p) {
-      const b = bloco(id, p);
+    vortice(id, p, o) {
+      // o.parte: "fundo" (só o bloco) ou "bracos" (só o vórtice) — usado na animação do boot.
+      const b = o.parte === "bracos" ? { defs: "", corpo: "" } : bloco(id, p);
+      if (o.parte === "fundo") return b;
       return { defs: b.defs + sombra(id), corpo: b.corpo +
         `<g filter="url(#${id}s)">${bracos(6, p, 256, 256, 190, 1.55, 19)}` +
         `<circle cx="256" cy="256" r="26" fill="${p.braco1}"/></g>` };
@@ -128,7 +130,7 @@
     const estilo = DESENHOS[opcoes.estilo] ? opcoes.estilo : "vortice";
     const p = { ...PALETAS.oceano, ...(typeof opcoes.paleta === "string" ? PALETAS[opcoes.paleta] : opcoes.paleta || {}) };
     const id = "vl" + (opcoes.id || ++seq);
-    const d = DESENHOS[estilo](id, p);
+    const d = DESENHOS[estilo](id, p, opcoes);
     const t = opcoes.tamanho ? ` width="${opcoes.tamanho}" height="${opcoes.tamanho}"` : "";
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"${t} role="img" aria-label="Vorticis SO">` +
       `<defs>${d.defs}</defs>${d.corpo}</svg>`;

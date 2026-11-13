@@ -3,15 +3,23 @@
 #
 # * Espera o dispositivo de vídeo aparecer (no boot do pen-drive o login automático
 #   pode começar antes de o driver de vídeo terminar de carregar).
-# * Tenta o compositor com aceleração por GPU; se ele não subir (VM sem 3D, GPU sem
-#   driver), usa renderização por software para nunca deixar a tela preta.
-# * Se o compositor cair logo ao iniciar, tenta de novo algumas vezes.
+# * Usa a GPU quando há aceleração real. Em placas sem 3D (VMs, vídeo genérico do
+#   firmware) ou se o compositor cair, usa renderização por software estável (pixman):
+#   o OpenGL por software (llvmpipe) pode derrubar o compositor.
+# * Se o compositor cair, recomeça em modo software em vez de voltar à tela de login.
 export XDG_CURRENT_DESKTOP=Vorticis:wlroots
 export XDG_SESSION_DESKTOP=vorticis
 export MOZ_ENABLE_WAYLAND=1
 export QT_QPA_PLATFORM="wayland;xcb"
 
-registrar() { logger -t vorticis-sessao "$*" 2>/dev/null || true; }
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
+mkdir -p "$LOG_DIR"
+LOG="$LOG_DIR/vorticis-sessao.log"
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.anterior"
+registrar() {
+    echo "$(date '+%F %T') $*" >> "$LOG"
+    logger -t vorticis-sessao "$*" 2>/dev/null || true
+}
 
 i=0
 while [ $i -lt 20 ] && ! ls /dev/dri/card* >/dev/null 2>&1; do
@@ -25,22 +33,42 @@ usar_software() {
     export LIBGL_ALWAYS_SOFTWARE=1
 }
 
-ls /dev/dri/renderD* >/dev/null 2>&1 || usar_software
+# Drivers de vídeo sem aceleração 3D real (o render node existe, mas o OpenGL seria llvmpipe).
+sem_3d() {
+    ls /dev/dri/renderD* >/dev/null 2>&1 || return 0
+    for drv in /sys/class/drm/card*/device/driver; do
+        [ -e "$drv" ] || continue
+        case "$(basename "$(readlink -f "$drv")")" in
+            simpledrm|simple-framebuffer|bochs*|cirrus*|efifb|vesafb|hyperv_drm|vboxvideo|mgag200|ast) return 0 ;;
+            virtio_gpu|virtio-pci)
+                # virtio-gpu só tem 3D com virgl (o QEMU informa "virgl" nas capacidades)
+                grep -qs virgl /sys/kernel/debug/dri/*/virtio-gpu-features 2>/dev/null || return 0 ;;
+        esac
+    done
+    return 1
+}
+
+if sem_3d; then
+    registrar "vídeo sem aceleração 3D: renderização por software"
+    usar_software
+fi
 
 tentativa=1
 while [ $tentativa -le 3 ]; do
     inicio=$(date +%s)
-    labwc "$@" && exit 0
+    labwc "$@" 2>> "$LOG_DIR/labwc.log"
+    codigo=$?
     duracao=$(( $(date +%s) - inicio ))
-    # Encerrou com erro depois de funcionar um tempo: não é falha de inicialização.
-    [ "$duracao" -gt 20 ] && exit 1
-    registrar "labwc encerrou em ${duracao}s (tentativa $tentativa)"
+    registrar "labwc encerrou (código $codigo, ${duracao}s, tentativa $tentativa)"
+    # Saída normal (usuário encerrou a sessão)
+    [ "$codigo" -eq 0 ] && exit 0
     if [ -z "$VORTICIS_SEM_GPU" ]; then
-        registrar "usando renderização por software"
+        registrar "passando para renderização por software"
         usar_software
     else
         sleep 2
     fi
     tentativa=$((tentativa + 1))
 done
+registrar "o compositor falhou 3 vezes; voltando à tela de login"
 exit 1

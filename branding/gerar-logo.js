@@ -46,8 +46,16 @@ copiar(path.join(B, "vorticis.svg"), path.join(CAL, "logo.svg"));
 copiar(path.join(B, "png/vorticis-256.png"), path.join(CAL, "logo.png"));
 copiar(path.join(B, "png/vorticis-512.png"), path.join(CAL, "boasvindas.png"));
 
-// Plymouth (tela de inicialização do sistema instalado e do pen-drive)
-copiar(path.join(B, "png/vorticis-256.png"), path.join(INC, "usr/share/plymouth/themes/vorticis/logo.png"));
+// Plymouth (tela de inicialização): fundo arredondado parado + vórtice girando por cima
+const PLY = path.join(INC, "usr/share/plymouth/themes/vorticis");
+for (const parte of ["fundo", "bracos"]) {
+  const arq = path.join(B, `vorticis-${parte}.svg`);
+  escrever(arq, L.svg({ ...PADRAO, parte, id: parte }));
+  fs.mkdirSync(PLY, { recursive: true });
+  execFileSync("rsvg-convert", ["-w", "200", "-h", "200", arq, "-o", path.join(PLY, `${parte}.png`)]);
+}
+const antigo = path.join(PLY, "logo.png");
+if (fs.existsSync(antigo)) fs.unlinkSync(antigo);
 
 // Raiz da ISO / pen-drive: ícone da unidade no Windows (autorun.inf + .ico)
 copiar(path.join(B, "vorticis.ico"), path.join(BIN, "vorticis.ico"));

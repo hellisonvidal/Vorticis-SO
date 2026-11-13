@@ -2,11 +2,14 @@
 Window.SetBackgroundTopColor(0.04, 0.43, 0.72);
 Window.SetBackgroundBottomColor(0.01, 0.10, 0.24);
 
-logo.image = Image("logo.png");
+fundo.image = Image("fundo.png");
+fundo.sprite = Sprite(fundo.image);
+logo.image = Image("bracos.png");
 logo.sprite = Sprite(logo.image);
 logo.x = Window.GetX() + Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
 logo.y = Window.GetY() + Window.GetHeight() / 2 - logo.image.GetHeight() / 2 - 40;
-logo.sprite.SetPosition(logo.x, logo.y, 1);
+fundo.sprite.SetPosition(logo.x, logo.y, 1);
+logo.sprite.SetPosition(logo.x, logo.y, 2);
 
 titulo.image = Image.Text("Vorticis SO", 0.92, 0.96, 1, 1, "Sans Bold 26");
 titulo.sprite = Sprite(titulo.image);
@@ -14,7 +17,7 @@ titulo.sprite.SetPosition(Window.GetX() + Window.GetWidth() / 2 - titulo.image.G
 
 angulo = 0;
 fun girar() {
-    # O vórtice gira devagar enquanto o sistema inicia
+    # Só o vórtice gira (o fundo arredondado fica parado)
     angulo += 0.04;
     logo.sprite.SetImage(logo.image.Rotate(angulo));
 }
