@@ -21,6 +21,13 @@ import sys
 from pathlib import Path
 from urllib.parse import urlencode
 
+# Sem aceleração 3D: o vorticis-sessao exporta VORTICIS_SEM_GPU e deixa uma marca em
+# $XDG_RUNTIME_DIR (para quem for aberto fora da sessão). O WebKit com llvmpipe trava.
+_marca = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "vorticis-sem-gpu"
+if os.environ.get("VORTICIS_SEM_GPU") == "1" or _marca.exists() or not list(Path("/dev/dri").glob("renderD*")):
+    os.environ.update(VORTICIS_SEM_GPU="1", WEBKIT_DISABLE_DMABUF_RENDERER="1", LIBGL_ALWAYS_SOFTWARE="1")
+SEM_GPU = os.environ.get("VORTICIS_SEM_GPU") == "1"
+
 # gtk4-layer-shell precisa ser carregada antes da libwayland.
 _lib = ctypes.util.find_library("gtk4-layer-shell")
 if _lib and "LD_PRELOAD" not in os.environ:
@@ -35,7 +42,6 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
 
 RAIZ = Path(os.environ.get("VORTICIS_SHELL_DIR", "/usr/share/vorticis/shell"))
-SEM_GPU = os.environ.get("VORTICIS_SEM_GPU") == "1" or not list(Path("/dev/dri").glob("renderD*"))
 CSS_TRANSPARENTE = "window.vorticis-transparente, window.vorticis-transparente > * { background: transparent; }"
 
 ESTADO = {"posicao": "inferior", "altura": 56, "alinhamento": "centro"}

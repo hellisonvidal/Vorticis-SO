@@ -18,6 +18,7 @@ import re
 import shutil
 import socket
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import time
 from pathlib import Path
@@ -196,7 +197,6 @@ def v_rede():
         res.append(item("rede", "Rede", "Conexão com a internet", estado,
                         {"full": "Conectado", "limited": "Conexão limitada", "portal": "Rede pede login (portal)"}.get(con, "Sem conexão")))
     try:
-        socket.setdefaulttimeout(5)
         socket.getaddrinfo("deb.debian.org", 443)
         res.append(item("dns", "Rede", "Resolução de nomes (DNS)", "ok", "Funcionando"))
     except OSError:
@@ -229,6 +229,9 @@ def v_atualizacoes():
     if vorticis.get("disponivel"):
         detalhe += f" · Vorticis {vorticis.get('mais_recente')} disponível"
     estado = "aviso" if n or vorticis.get("disponivel") else "ok"
+    if estado == "ok" and vorticis.get("erro"):
+        return [item("atualizacoes", "Sistema", "Atualizações", "aviso",
+                     "Não foi possível consultar as versões do Vorticis (sem internet?)")]
     return [item("atualizacoes", "Sistema", "Atualizações", estado, detalhe if estado != "ok" else "Sistema em dia",
                  correcao("atualizacoes") if estado != "ok" else None)]
 
@@ -283,14 +286,17 @@ VERIFICACOES = [v_servicos, v_pacotes, v_espaco, v_smart, v_memoria, v_temperatu
                 v_firmware, v_rede, v_relogio, v_atualizacoes, v_bateria, v_seguranca, v_restauracao, v_flatpak]
 
 
+def _executar(v):
+    try:
+        return v()
+    except Exception as e:  # uma verificação com problema não interrompe as outras
+        return [item(v.__name__, "Diagnóstico", f"Falha ao verificar ({v.__name__[2:]})", "info", str(e)[:200])]
+
+
 def verificar():
-    res = []
-    for v in VERIFICACOES:
-        try:
-            res.extend(v())
-        except Exception as e:  # uma verificação com problema não interrompe as outras
-            res.append(item(v.__name__, "Diagnóstico", f"Falha ao verificar ({v.__name__[2:]})", "info", str(e)[:200]))
-    return res
+    # As verificações são independentes e quase todas esperam outros programas: rodam em paralelo
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        return [r for lista in ex.map(_executar, VERIFICACOES) for r in lista]
 
 
 def cmd_verificar(a):

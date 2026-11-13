@@ -23,6 +23,10 @@ importantes.
 - **Correção importante no instalador**: a imagem não trazia o GRUB para o disco; o sistema instalado
   podia não iniciar. Agora o instalador grava o GRUB certo para UEFI ou BIOS (com Secure Boot via shim)
   e configura criptografia, tela de boot e initramfs.
+- Outras correções encontradas nos testes: temas, perfis da barra e documentação agora carregam
+  corretamente dentro do sistema; apps não travam em computadores sem aceleração 3D mesmo quando
+  abertos fora da sessão; o diagnóstico ficou bem mais rápido (verificações em paralelo); no
+  pen-drive a tela não é mais bloqueada por inatividade (o usuário live não tem senha).
 
 ---
 

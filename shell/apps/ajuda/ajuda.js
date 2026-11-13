@@ -77,7 +77,7 @@
 
   async function texto(arq) {
     if (!(arq in cache)) {
-      try { const r = await fetch(new URL(arq, BASE)); cache[arq] = r.ok ? await r.text() : null; }
+      try { const r = await fetch(new URL(arq, BASE)); cache[arq] = r.ok || (r.status === 0 && BASE.protocol === "file:") ? await r.text() : null; }
       catch (_) { cache[arq] = null; }
     }
     return cache[arq];

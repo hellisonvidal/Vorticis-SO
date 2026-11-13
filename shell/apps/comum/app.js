@@ -12,6 +12,14 @@
   const pendentes = new Map();
   let seq = 0;
 
+  // Partes opcionais (cond ? el(...) : null) não devem virar o texto "null" na tela.
+  for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+    for (const nome of ["replaceChildren", "append", "prepend"]) {
+      const original = proto[nome];
+      proto[nome] = function (...nos) { return original.apply(this, nos.filter((n) => n !== null && n !== undefined && n !== false)); };
+    }
+  }
+
   function temPonte() {
     try { return !!(global.webkit && global.webkit.messageHandlers && global.webkit.messageHandlers.vorticis); }
     catch (_) { return false; }

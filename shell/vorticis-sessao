@@ -21,6 +21,8 @@ registrar() {
     logger -t vorticis-sessao "$*" 2>/dev/null || true
 }
 
+[ -n "$XDG_RUNTIME_DIR" ] && rm -f "$XDG_RUNTIME_DIR/vorticis-sem-gpu"
+
 i=0
 while [ $i -lt 20 ] && ! ls /dev/dri/card* >/dev/null 2>&1; do
     sleep 0.5; i=$((i + 1))
@@ -31,6 +33,8 @@ usar_software() {
     export VORTICIS_SEM_GPU=1
     export WEBKIT_DISABLE_DMABUF_RENDERER=1
     export LIBGL_ALWAYS_SOFTWARE=1
+    # Marca para programas abertos fora da sessão (ex.: de um terminal em outro VT)
+    [ -n "$XDG_RUNTIME_DIR" ] && touch "$XDG_RUNTIME_DIR/vorticis-sem-gpu" 2>/dev/null
 }
 
 # Drivers de vídeo sem aceleração 3D real (o render node existe, mas o OpenGL seria llvmpipe).

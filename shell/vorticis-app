@@ -22,6 +22,13 @@ import threading
 from pathlib import Path
 from urllib.parse import quote
 
+# Sem aceleração 3D: o vorticis-sessao exporta VORTICIS_SEM_GPU e deixa uma marca em
+# $XDG_RUNTIME_DIR (para quem for aberto fora da sessão). O WebKit com llvmpipe trava.
+_marca = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "vorticis-sem-gpu"
+if os.environ.get("VORTICIS_SEM_GPU") == "1" or _marca.exists() or not list(Path("/dev/dri").glob("renderD*")):
+    os.environ.update(VORTICIS_SEM_GPU="1", WEBKIT_DISABLE_DMABUF_RENDERER="1", LIBGL_ALWAYS_SOFTWARE="1")
+SEM_GPU = os.environ.get("VORTICIS_SEM_GPU") == "1"
+
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
@@ -70,9 +77,8 @@ class Janela:
         cfg.set_allow_file_access_from_file_urls(True)
         cfg.set_allow_universal_access_from_file_urls(True)
         cfg.set_enable_media_stream(True)
-        sem_gpu = os.environ.get("VORTICIS_SEM_GPU") == "1" or not list(Path("/dev/dri").glob("renderD*"))
         cfg.set_hardware_acceleration_policy(
-            WebKit.HardwareAccelerationPolicy.NEVER if sem_gpu else WebKit.HardwareAccelerationPolicy.ALWAYS)
+            WebKit.HardwareAccelerationPolicy.NEVER if SEM_GPU else WebKit.HardwareAccelerationPolicy.ALWAYS)
         consulta = [f"abrir={quote(Path(a).resolve().as_uri() if '://' not in a else a, safe='')}" for a in arquivos]
         if secao:
             consulta.append(f"secao={quote(secao)}")

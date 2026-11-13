@@ -2,6 +2,9 @@
 mkdir -p "$HOME/.cache" && vorticis-shell >"$HOME/.cache/vorticis-shell.log" 2>&1 &
 mako >/dev/null 2>&1 &
 nm-applet --indicator >/dev/null 2>&1 &
-swayidle -w timeout 600 'swaylock -f -c 03214a' before-sleep 'swaylock -f -c 03214a' >/dev/null 2>&1 &
+# Bloqueio após 10 min. No pen-drive (modo live) não: o usuário não conhece a senha.
+if [ ! -d /run/live/medium ]; then
+    swayidle -w timeout 600 'swaylock -f -c 03214a' before-sleep 'swaylock -f -c 03214a' >/dev/null 2>&1 &
+fi
 lxpolkit >/dev/null 2>&1 &
 kanshi >/dev/null 2>&1 &

@@ -79,7 +79,7 @@
   function selecionar(d) {
     estado.sel = d;
     renderLista();
-    const linhas = [["Estado", ESTADOS[d.estado] || d.estado], ["Fabricante", d.fabricante], ["Driver em uso", d.driver || "nenhum"],
+    const linhas = [["Estado", ESTADOS[d.estado] || d.estado], ["Fabricante", d.fabricante], ["Driver em uso", d.driver || (["processador", "memoria"].includes(d.categoria) ? null : "nenhum")],
       ["Identificação", d.id], ...Object.entries(d.detalhes || {})].filter(([, v]) => v);
     const saida = el("div", { id: "saida-drivers" });
     $("#detalhe").replaceChildren(

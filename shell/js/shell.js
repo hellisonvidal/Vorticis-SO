@@ -90,7 +90,9 @@
   const NO_SISTEMA = (() => { try { return !!window.webkit.messageHandlers.vorticis; } catch (_) { return false; } })();
 
   async function carregarJSON(url, padrao) {
-    try { const r = await fetch(url, { cache: "no-cache" }); if (!r.ok) throw new Error(r.status); return await r.json(); }
+    try { const r = await fetch(url, { cache: "no-cache" });
+      // Arquivos locais (file://) chegam com status 0 no WebKit: também é sucesso
+      if (!r.ok && !(r.status === 0 && new URL(url, location.href).protocol === "file:")) throw new Error(r.status); return await r.json(); }
     catch (_) { return padrao; }
   }
 
