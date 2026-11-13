@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """vorticis-shell — inicia a área de trabalho do Vorticis SO no compositor Wayland.
 
-Cria três superfícies (protocolo wlr-layer-shell):
+Superfícies (protocolo wlr-layer-shell):
   * papel de parede  — camada BACKGROUND, tela inteira, água interativa;
   * barra de tarefas — camada TOP, ancorada embaixo (ou em cima), reserva espaço;
-  * menus            — camada OVERLAY, tela inteira e transparente, só visível enquanto
-                       o menu, a personalização ou um menu de contexto estão abertos.
+  * painel           — camada OVERLAY, criada só enquanto o menu, a personalização ou um
+                       menu de contexto estão abertos, com o TAMANHO DO PAINEL (não ocupa a
+                       tela inteira; não depende de transparência, que falha sem GPU).
 Sem aceleração 3D (VMs, GPUs sem driver), o WebKit desenha por software (VORTICIS_SEM_GPU=1).
 
 Dependências (Debian 13): python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0
@@ -18,6 +19,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlencode
 
 # gtk4-layer-shell precisa ser carregada antes da libwayland.
 _lib = ctypes.util.find_library("gtk4-layer-shell")
@@ -26,16 +28,19 @@ if _lib and "LD_PRELOAD" not in os.environ:
     os.execvp(sys.executable, [sys.executable] + sys.argv)
 
 import gi  # noqa: E402
+gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gdk, Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, WebKit, Gtk4LayerShell as LS  # noqa: E402
 
 RAIZ = Path(os.environ.get("VORTICIS_SHELL_DIR", "/usr/share/vorticis/shell"))
-ALTURA_BARRA = 64
 SEM_GPU = os.environ.get("VORTICIS_SEM_GPU") == "1" or not list(Path("/dev/dri").glob("renderD*"))
-
 CSS_TRANSPARENTE = "window.vorticis-transparente, window.vorticis-transparente > * { background: transparent; }"
+
+ESTADO = {"posicao": "inferior", "altura": 56, "alinhamento": "centro"}
+CAMADAS = {}
+APP = None
 
 
 def usuario_atual():
@@ -53,29 +58,28 @@ def usuario_atual():
 
 
 class Superficie:
-    def __init__(self, app, modo):
+    def __init__(self, modo, consulta=None):
         self.modo = modo
-        self.posicao = "inferior"
-        self.janela = Gtk.ApplicationWindow(application=app)
+        self.janela = Gtk.ApplicationWindow(application=APP)
         LS.init_for_window(self.janela)
         LS.set_namespace(self.janela, f"vorticis-{modo}")
-        if modo == "menu":
-            LS.set_layer(self.janela, LS.Layer.OVERLAY)
-            for borda in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
-                LS.set_anchor(self.janela, borda, True)
-            LS.set_exclusive_zone(self.janela, -1)
-            LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND)
-        elif modo == "papel":
+        if modo == "papel":
             LS.set_layer(self.janela, LS.Layer.BACKGROUND)
             for borda in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
                 LS.set_anchor(self.janela, borda, True)
             LS.set_exclusive_zone(self.janela, -1)
-        else:
+        elif modo == "barra":
             LS.set_layer(self.janela, LS.Layer.TOP)
             for borda in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
                 LS.set_anchor(self.janela, borda, True)
-            LS.set_exclusive_zone(self.janela, ALTURA_BARRA)
-            self.janela.set_default_size(-1, ALTURA_BARRA)
+            LS.set_exclusive_zone(self.janela, ESTADO["altura"])
+            self.janela.set_default_size(-1, ESTADO["altura"])
+            # Foco sob demanda: sem ele o WebKit não recebe os cliques da barra.
+            LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND)
+        else:  # painel
+            LS.set_layer(self.janela, LS.Layer.OVERLAY)
+            LS.set_keyboard_mode(self.janela, LS.KeyboardMode.ON_DEMAND)
+            posicionar_painel(self.janela, consulta)
 
         gerente = WebKit.UserContentManager()
         gerente.register_script_message_handler("vorticis", None)
@@ -90,17 +94,19 @@ class Superficie:
         cfg.set_allow_file_access_from_file_urls(True)
         cfg.set_hardware_acceleration_policy(
             WebKit.HardwareAccelerationPolicy.NEVER if SEM_GPU else WebKit.HardwareAccelerationPolicy.ALWAYS)
-        if modo in ("barra", "menu"):
+        if modo == "barra" and not SEM_GPU:
+            # Fundo transparente só com GPU: no desenho por software o WebKit apaga as áreas
+            # não redesenhadas de páginas transparentes (a barra "sumia" ao passar o mouse).
             self.janela.add_css_class("vorticis-transparente")
             transparente = Gdk.RGBA()
             transparente.parse("rgba(0,0,0,0)")
             self.web.set_background_color(transparente)
-        self.web.load_uri((RAIZ / "index.html").as_uri() + f"?modo={modo}")
+        params = {"modo": modo, **(consulta or {})}
+        if SEM_GPU:
+            params["solido"] = "1"
+        self.web.load_uri((RAIZ / "index.html").as_uri() + "?" + urlencode(params))
         self.janela.set_child(self.web)
-        if modo == "menu":
-            self.janela.set_visible(False)
-        else:
-            self.janela.present()
+        self.janela.present()
 
     def js(self, codigo):
         self.web.evaluate_javascript(codigo, -1, None, None, None, None, None)
@@ -108,30 +114,32 @@ class Superficie:
     def mensagem(self, _gerente, valor):
         try:
             dados = json.loads(valor.to_string())
-        except Exception:
+        except ValueError:
             return
         acao = dados.get("acao")
+        if os.environ.get("VORTICIS_DEPURAR"):
+            print(f"vorticis-shell: [{self.modo}] {dados}", file=sys.stderr, flush=True)
         if acao == "abrir":
-            # Comando vem do catálogo local do shell; executa sem shell para evitar injeção.
+            GLib.idle_add(lambda: fechar_painel() and False)
+            # O comando vem do catálogo local do shell; executa sem shell para evitar injeção.
             try:
                 subprocess.Popen(shlex.split(dados.get("cmd", "")), start_new_session=True)
             except (OSError, ValueError) as e:
                 print("vorticis-shell: falha ao abrir", dados.get("app"), e, file=sys.stderr)
-        elif acao == "abrir-painel" and "menu" in CAMADAS:
-            # A barra ou o papel pedem um painel: mostra a camada de menus e abre o painel nela.
-            menu = CAMADAS["menu"]
-            menu.janela.present()
-            menu.js(f"window.vorticisAbrirPainel({json.dumps(dados.get('painel'))}, {json.dumps(dados)})")
-        elif acao == "painel" and self.modo == "menu" and not dados.get("aberto"):
-            self.janela.set_visible(False)
+        elif acao == "abrir-painel":
+            # Criar/destruir janelas de dentro do callback do WebKit é reentrante: adia para o laço.
+            GLib.idle_add(lambda: abrir_painel(dados) and False)
+        elif acao in ("painel", "fechar-painel") and not dados.get("aberto"):
+            GLib.idle_add(lambda: fechar_painel() and False)
         elif acao == "barra" and self.modo == "barra":
-            self.posicao = "superior" if dados.get("posicao") == "superior" else "inferior"
-            altura = {"pequeno": 46, "medio": 56, "grande": 64}.get(dados.get("tamanho"), 56)
-            LS.set_anchor(self.janela, LS.Edge.TOP, self.posicao == "superior")
-            LS.set_anchor(self.janela, LS.Edge.BOTTOM, self.posicao == "inferior")
-            self.janela.set_default_size(-1, altura)
+            ESTADO["posicao"] = "superior" if dados.get("posicao") == "superior" else "inferior"
+            ESTADO["alinhamento"] = dados.get("alinhamento", "centro")
+            ESTADO["altura"] = {"pequeno": 46, "medio": 56, "grande": 64}.get(dados.get("tamanho"), 56)
+            LS.set_anchor(self.janela, LS.Edge.TOP, ESTADO["posicao"] == "superior")
+            LS.set_anchor(self.janela, LS.Edge.BOTTOM, ESTADO["posicao"] == "inferior")
+            self.janela.set_default_size(-1, ESTADO["altura"])
             # Ocultar automaticamente: a barra não reserva espaço; as janelas usam a tela inteira.
-            LS.set_exclusive_zone(self.janela, 0 if dados.get("ocultar") else altura)
+            LS.set_exclusive_zone(self.janela, 0 if dados.get("ocultar") else ESTADO["altura"])
         elif acao == "energia-sessao":
             comandos = {"bloquear": ["swaylock", "-f", "-c", "03214a"], "desligar": ["systemctl", "poweroff"],
                         "reiniciar": ["systemctl", "reboot"], "sair": ["labwc", "--exit"]}
@@ -139,25 +147,76 @@ class Superficie:
                 subprocess.Popen(comandos[dados["acao"]], start_new_session=True)
         elif acao == "preferencia":
             chamada = f"window.vorticisPreferencia({json.dumps(dados.get('chave'))}, {json.dumps(dados.get('valor'))})"
-            for outra in CAMADAS.values():
+            for outra in list(CAMADAS.values()):
                 if outra is not self:
                     outra.js(chamada)
         elif acao == "energia":
-            subprocess.Popen(["vorticis-recursos", "energia", "desempenho" if dados.get("perfil") == "desempenho" else "equilibrado"])
+            perfil = "desempenho" if dados.get("perfil") == "desempenho" else "equilibrado"
+            subprocess.Popen(["vorticis-recursos", "energia", perfil], stderr=subprocess.DEVNULL)
 
 
-CAMADAS = {}
+def posicionar_painel(janela, c):
+    """Tamanho e posição do painel, junto da barra (as bordas da barra já são respeitadas
+    pelo compositor, porque a barra reserva espaço com exclusive zone)."""
+    painel = c.get("painel")
+    perto = LS.Edge.TOP if ESTADO["posicao"] == "superior" else LS.Edge.BOTTOM
+    if painel == "menu":
+        largura, altura = 680, 600
+        LS.set_anchor(janela, perto, True)
+        if ESTADO["alinhamento"] == "esquerda":
+            LS.set_anchor(janela, LS.Edge.LEFT, True)
+            LS.set_margin(janela, LS.Edge.LEFT, 8)
+    elif painel == "config":
+        largura, altura = 440, 660
+        LS.set_anchor(janela, perto, True)
+        LS.set_anchor(janela, LS.Edge.RIGHT, True)
+        LS.set_margin(janela, LS.Edge.RIGHT, 8)
+    else:  # menus de contexto
+        itens = {"ctx-app": 5, "ctx-barra": 2, "ctx-papel": 4}.get(painel, 4)
+        largura, altura = 240, itens * 37 + 14
+        LS.set_anchor(janela, LS.Edge.LEFT, True)
+        LS.set_margin(janela, LS.Edge.LEFT, max(0, int(float(c.get("x", 0))) - 20))
+        if painel == "ctx-papel":
+            LS.set_anchor(janela, LS.Edge.TOP, True)
+            LS.set_margin(janela, LS.Edge.TOP, max(0, int(float(c.get("y", 0)))))
+        else:
+            LS.set_anchor(janela, perto, True)
+    if painel != "ctx-papel":
+        LS.set_margin(janela, perto, 8)
+    janela.set_default_size(largura, altura)
+
+
+def abrir_painel(dados):
+    painel = dados.get("painel")
+    atual = CAMADAS.get("painel")
+    mesmo = atual is not None and atual.painel == painel and painel in ("menu", "config")
+    fechar_painel()
+    if mesmo:  # clicar de novo no botão do menu fecha o menu
+        return
+    consulta = {k: str(v) for k, v in dados.items() if k in ("painel", "aba", "app", "x", "y") and v is not None}
+    sup = Superficie("painel", consulta)
+    sup.painel = painel
+    CAMADAS["painel"] = sup
+
+
+def fechar_painel():
+    sup = CAMADAS.pop("painel", None)
+    if sup is not None:
+        sup.janela.destroy()
 
 
 def ativar(app):
+    global APP
+    APP = app
+    app.hold()  # o shell continua ativo mesmo sem janelas de painel
     css = Gtk.CssProvider()
     if hasattr(css, "load_from_string"):  # GTK ≥ 4.12
         css.load_from_string(CSS_TRANSPARENTE)
     else:
         css.load_from_data(CSS_TRANSPARENTE, -1)
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-    for modo in ("papel", "barra", "menu"):
-        CAMADAS[modo] = Superficie(app, modo)
+    for modo in ("papel", "barra"):
+        CAMADAS[modo] = Superficie(modo)
 
 
 if __name__ == "__main__":

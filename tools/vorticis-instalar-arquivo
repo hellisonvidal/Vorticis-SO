@@ -1,0 +1,5 @@
+#!/bin/sh
+# Abre o instalador universal (vorticis-compat) num terminal para o arquivo escolhido
+# (dois cliques num .exe, .msi, .apk, .deb, .rpm, .AppImage ou .flatpakref).
+[ -n "$1" ] || { echo "uso: vorticis-instalar-arquivo ARQUIVO" >&2; exit 1; }
+exec foot -e sh -c 'vorticis-compat instalar "$1"; printf "\nPressione Enter para fechar. "; read -r _' sh "$1"

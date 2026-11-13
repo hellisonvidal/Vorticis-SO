@@ -113,8 +113,24 @@
   /* ======================================================================= Estado */
   const MODO = new URLSearchParams(location.search).get("modo") || "completo";
   document.body.classList.add("modo-" + MODO);
+  document.documentElement.classList.add("modo-" + MODO); // fundo transparente sem depender de :has()
+  if (new URLSearchParams(location.search).get("solido")) document.documentElement.classList.add("solido");
+
+  // Nas camadas do SO (barra, papel, painel), tooltips nativos do WebKit viram popups GTK
+  // presos à superfície layer-shell e quebram o desenho da barra. O texto vai para aria-label.
+  if (MODO !== "completo") {
+    const semTitulo = (raiz) => raiz.querySelectorAll("[title]").forEach((e) => {
+      if (!e.hasAttribute("aria-label")) e.setAttribute("aria-label", e.getAttribute("title"));
+      e.removeAttribute("title");
+    });
+    semTitulo(document);
+    new MutationObserver((mudancas) => mudancas.forEach((m) => {
+      if (m.type === "attributes" && m.target.hasAttribute("title")) semTitulo(m.target.parentNode || document);
+      m.addedNodes.forEach((n) => n.nodeType === 1 && (n.hasAttribute("title") ? semTitulo(n.parentNode) : semTitulo(n)));
+    })).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["title"] });
+  }
   const estado = { temas: {}, perfis: PERFIS_PADRAO, abertos: new Map(), z: 10 };
-  const fundo = MODO === "barra" || MODO === "menu"
+  const fundo = MODO === "barra" || MODO === "painel"
     ? { definirTema() {}, definirImagem() {}, definirQualidade: (q) => (q === "auto" ? AguaVorticis.detectarQualidade() : q) }
     : new FundoVorticis($("#papel"));
 
@@ -179,7 +195,7 @@
     cl.toggle("barra-esquerda", b.alinhamento === "esquerda");
     cl.toggle("barra-ocultar", !!b.ocultar);
     $("#indicador-perfil").textContent = `${p.icone} ${p.nome}`;
-    ponte("barra", { posicao: b.posicao, tamanho, ocultar: !!b.ocultar });
+    ponte("barra", { posicao: b.posicao, alinhamento: b.alinhamento, tamanho, ocultar: !!b.ocultar });
     $("#relogio-grande").hidden = !prefs.ler("relogioGrande", true);
   }
 
@@ -380,7 +396,7 @@
   const CAMADA_PEDE = MODO === "barra" || MODO === "papel";
   const algoAberto = () => !$("#menu").hidden || !$("#config").hidden || !$("#ctx").hidden;
   function verificarCamadaVazia() {
-    if (MODO === "menu") setTimeout(() => { if (!algoAberto()) ponte("painel", { aberto: false }); }, 0);
+    if (MODO === "painel") setTimeout(() => { if (!algoAberto()) ponte("painel", { aberto: false }); }, 0);
   }
 
   function fecharPaineis() {
@@ -513,6 +529,19 @@
     relogio();
     setInterval(relogio, 1000);
     bateria();
+
+    if (MODO === "painel") {
+      // Janela de painel criada pelo vorticis-shell: abre o painel pedido na URL e
+      // fecha quando perde o foco (clique em outra janela).
+      const q = new URLSearchParams(location.search);
+      window.vorticisAbrirPainel(q.get("painel") || "menu", { aba: q.get("aba"), app: q.get("app") });
+      window.addEventListener("blur", () => { fecharPaineis(); verificarCamadaVazia(); });
+    } else if (CAMADA_PEDE) {
+      // Clique na barra (fora do botão do menu) ou no papel de parede fecha o painel aberto.
+      document.addEventListener("pointerdown", (e) => {
+        if (!e.target.closest("#botao-iniciar")) ponte("fechar-painel", {});
+      }, true);
+    }
   }
 
   function contextoBarra(e) {

@@ -240,9 +240,17 @@ body.barra-superior #janelas { inset: var(--altura-barra) 0 0 0; }
 
 /* ---------------- Modos dentro do SO (camadas separadas) ---------------- */
 body.modo-papel #barra, body.modo-papel .painel, body.modo-papel #aviso, body.modo-papel #janelas, body.modo-papel #ctx { display: none !important; }
-body.modo-menu { background: transparent !important; }
-html:has(body.modo-menu), html:has(body.modo-barra) { background: transparent !important; }
-body.modo-menu #barra, body.modo-menu #papel, body.modo-menu #area, body.modo-menu #janelas { display: none !important; }
+/* Janela de painel no SO: o painel ocupa a janela inteira, com fundo sólido */
+html.modo-painel, body.modo-painel { background: var(--fundo-solido, #061a33) !important; }
+body.modo-painel .painel, body.modo-painel .ctx {
+  inset: 0 !important; left: 0 !important; top: 0 !important; width: auto !important; max-height: none !important;
+  transform: none !important; border-radius: 0; border: 0; animation: none; box-shadow: none;
+  background: var(--fundo-solido, #061a33) !important; backdrop-filter: none !important;
+}
+body.modo-painel #barra, body.modo-painel #papel, body.modo-painel #area, body.modo-painel #janelas { display: none !important; }
 body.modo-papel #area { inset: 0; }
 body.modo-barra { background: transparent !important; }
 body.modo-barra #papel, body.modo-barra #area, body.modo-barra #janelas { display: none; }
+
+/* Alternada pelo vorticis-shell para forçar um redesenho completo da camada */
+body.repintar { outline: 1px solid transparent; }

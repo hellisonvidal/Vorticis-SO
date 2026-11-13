@@ -1,5 +1,5 @@
 # Vorticis SO — itens iniciados com a sessão
-vorticis-shell >/dev/null 2>&1 &
+mkdir -p "$HOME/.cache" && vorticis-shell >"$HOME/.cache/vorticis-shell.log" 2>&1 &
 mako >/dev/null 2>&1 &
 nm-applet --indicator >/dev/null 2>&1 &
 swayidle -w timeout 600 'swaylock -f -c 03214a' before-sleep 'swaylock -f -c 03214a' >/dev/null 2>&1 &

@@ -2,7 +2,7 @@
 Type=Application
 Name=Instalar com Vorticis
 Comment=Instala programas de Windows, Android e Linux
-Exec=foot -e bash -c "vorticis-compat instalar %f; read -r -p \"Pressione Enter para fechar\" _"
+Exec=vorticis-instalar-arquivo %f
 Icon=system-software-install
 Categories=System;
 Terminal=false

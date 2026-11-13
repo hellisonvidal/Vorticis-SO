@@ -18,9 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Ferramentas Python compilam
-        run: for f in tools/vorticis-* shell/vorticis-shell shell/vorticis-app; do python3 -m py_compile "$f"; done
+        run: for f in tools/vorticis-* shell/vorticis-shell shell/vorticis-app; do head -1 "$f" | grep -q python || continue; python3 -m py_compile "$f"; done
       - name: Ferramentas respondem --help
-        run: for f in tools/vorticis-*; do [ "$(basename $f)" = vorticis-midia ] && continue; python3 "$f" --help > /dev/null; done
+        run: for f in tools/vorticis-*; do head -1 "$f" | grep -q python || continue; [ "$(basename $f)" = vorticis-midia ] && continue; python3 "$f" --help > /dev/null; done
       - name: Simulações
         run: |
           python3 tools/vorticis-recursos aplicar --simular
@@ -31,7 +31,7 @@ jobs:
           python3 tools/vorticis-drivers sugerir
           python3 tools/vorticis-sistema info
       - name: Scripts shell (shellcheck)
-        run: shellcheck -S warning build/build.sh installer/linux/vorticis-instalar-daqui build/config/hooks/live/*.hook.chroot build/config/includes.chroot/usr/lib/live/config/2000-vorticis-sessao
+        run: shellcheck -S warning build/build.sh shell/vorticis-sessao tools/vorticis-instalar-arquivo installer/linux/vorticis-instalar-daqui build/config/hooks/live/*.hook.chroot build/config/includes.chroot/usr/lib/live/config/2000-vorticis-sessao
       - name: Regras do firewall (nft -c)
         run: sudo apt-get install -y nftables && sudo nft -c -f security/nftables.conf
       - name: JSON válidos
