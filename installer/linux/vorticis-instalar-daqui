@@ -14,8 +14,7 @@
 #   --simular         mostra o que seria feito
 set -eu
 
-VERSAO="0.2"
-URL="https://github.com/hellisonvidal/Vorticis-SO/releases/download/v${VERSAO}/vorticis-${VERSAO}-amd64.iso"
+URL=""   # vazio: usa a versão mais recente publicada nas releases
 DESTINO_DIR="/vorticis"
 MODO="boot-iso"
 ISO=""
@@ -46,7 +45,12 @@ obter_iso() {
         [ -f "$ISO" ] || erro "ISO não encontrada: $ISO"
         return
     fi
-    ISO="${TMPDIR:-/var/tmp}/vorticis-${VERSAO}-amd64.iso"
+    if [ -z "$URL" ]; then
+        URL=$(curl -fsSL https://api.github.com/repos/hellisonvidal/Vorticis-SO/releases/latest \
+              | sed -n 's/.*"browser_download_url": *"\([^"]*\.iso\)".*/\1/p' | head -n1)
+        [ -n "$URL" ] || erro "Não foi possível descobrir a versão mais recente. Use --url ou --iso."
+    fi
+    ISO="${TMPDIR:-/var/tmp}/$(basename "$URL")"
     msg "Baixando $URL"
     run curl -fL --retry 3 -C - -o "$ISO" "$URL"
     msg "Verificando integridade (SHA-256)"

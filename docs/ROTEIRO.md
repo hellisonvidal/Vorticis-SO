@@ -12,9 +12,14 @@
 - [x] Mais drivers e suporte a todas as resoluções (vorticis-tela)
 - [x] macOS retirado: foco em Linux, Windows e Android
 
+## v0.2.1 — identidade visual ✔
+- [x] Ícone do sistema (vórtice) no menu, por tema ou à escolha (5 formatos, 10 paletas)
+- [x] Ícone no menu de boot, na tela de inicialização (Plymouth), no instalador e no pen-drive
+- [x] Login automático do pen-drive estável sem GPU; instalador abrindo pela sessão Wayland
+
 ## v0.3 "Maré alta" — experiência
 - [ ] Teste automático de boot da ISO em QEMU (UEFI e BIOS) no CI
-- [ ] Tela de login gráfica e tema Plymouth "gota d'água"
+- [ ] Tela de login gráfica com o tema do usuário
 - [ ] Lista de janelas abertas na barra no SO real (wlr-foreign-toplevel)
 - [ ] Notificações e central de controle rápido (Wi-Fi, volume, brilho)
 - [ ] Editor de temas e loja de temas da comunidade

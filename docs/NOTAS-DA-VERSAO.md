@@ -1,3 +1,23 @@
+# Vorticis SO 0.2.1 — identidade visual
+
+Atualização da 0.2 "Correnteza". Versão de testes (alfa): experimente primeiro numa máquina
+virtual ou num computador sem dados importantes.
+
+## Novidades da 0.2.1
+
+- **Ícone do Vorticis** — um vórtice, da mesma família do Vorticis Monitor — no lugar da gota:
+  botão e cabeçalho do menu, barra, menu de boot, tela de inicialização (o vórtice gira enquanto
+  o sistema carrega), instalador gráfico (barra lateral, janela e apresentação), ícone da unidade
+  do pen-drive no Windows e ícones do sistema.
+- **O ícone acompanha o tema**, e pode ser trocado à parte em Personalização → Ícones:
+  5 formatos (Vórtice, Ciclone, Redemoinho, Onda, Gota) e 10 combinações de cores.
+- **Modo live**: entra direto na área de trabalho também em computadores e VMs sem aceleração
+  3D; "Instalar Vorticis SO" fica fixado no início da barra e abre o instalador corretamente.
+- Os instaladores para Windows e Linux baixam sempre a versão mais recente.
+- Correção: com muitos apps fixados, o primeiro ficava escondido sob o botão do menu.
+
+---
+
 # Vorticis SO 0.2 "Correnteza"
 
 Primeira versão com instalador gerado. **Versão de testes (alfa)**: experimente primeiro numa
@@ -5,7 +25,7 @@ máquina virtual ou num computador sem dados importantes.
 
 ## Como instalar
 
-- **Pen-drive:** grave `vorticis-0.2-amd64.iso` com balenaEtcher, Ventoy, Rufus (modo DD) ou
+- **Pen-drive:** grave a ISO (`vorticis-<versão>-amd64.iso`) com balenaEtcher, Ventoy, Rufus (modo DD) ou
   `dd`, e inicie o computador por ele. No modo live, abra "Instalar Vorticis".
 - **A partir do Windows (UEFI):** baixe `Instalar-Vorticis.ps1` e rode no PowerShell como
   administrador: `powershell -ExecutionPolicy Bypass -File .\Instalar-Vorticis.ps1`.

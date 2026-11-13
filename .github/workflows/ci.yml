@@ -35,7 +35,7 @@ jobs:
           python3 tools/vorticis-drivers sugerir
           python3 tools/vorticis-sistema info
       - name: Scripts shell (shellcheck)
-        run: shellcheck -S warning build/build.sh shell/vorticis-sessao tools/vorticis-instalar-arquivo installer/linux/vorticis-instalar-daqui build/config/hooks/live/*.hook.chroot build/config/includes.chroot/usr/lib/live/config/2000-vorticis-sessao
+        run: shellcheck -S warning build/build.sh shell/vorticis-sessao tools/vorticis-instalar-arquivo tools/vorticis-instalar-sistema installer/linux/vorticis-instalar-daqui build/config/hooks/live/*.hook.chroot build/config/includes.chroot/usr/lib/live/config/2000-vorticis-sessao
       - name: Regras do firewall (nft -c)
         run: sudo apt-get install -y nftables && sudo nft -c -f security/nftables.conf
       - name: JSON válidos

@@ -140,7 +140,7 @@
   const NO_LIVE = !!(window.VORTICIS_USUARIO || {}).live || new URLSearchParams(location.search).get("live") === "1";
   if (NO_LIVE) {
     // Rodando pelo pen-drive: o instalador fica em destaque, fixado no início da barra.
-    APPS.instalar = { nome: "Instalar Vorticis SO", icone: "", logo: true, cor: "#0a84ff", cmd: "calamares-install-debian", cat: "Sistema" };
+    APPS.instalar = { nome: "Instalar Vorticis SO", icone: "", logo: true, cor: "#0a84ff", cmd: "vorticis-instalar-sistema", cat: "Sistema" };
   }
   const fixados = () => (NO_LIVE ? ["instalar"] : []).concat(
     (prefs.ler("fixados." + perfilAtual(), null) || perfil().fixados).filter((id) => APPS[id] && id !== "instalar"));

@@ -81,6 +81,10 @@ install -D -m 0644 "$RAIZ/security/sysctl-rede.conf" "$INC/etc/sysctl.d/80-vorti
 install -D -m 0644 "$RAIZ/security/vorticis-rede.service" "$INC/etc/systemd/system/vorticis-rede.service"
 rm -rf "$INC/etc/calamares"
 cp -a "$RAIZ/installer/calamares" "$INC/etc/calamares"
+# Versão do instalador = versão desta build
+sed -i -e "s/^\(  *version: *\).*/\1$VERSAO/" -e "s/^\(  *shortVersion: *\).*/\1$VERSAO/" \
+    -e "s/^\(  *versionedName: *\).*/\1Vorticis SO $VERSAO/" -e "s/^\(  *shortVersionedName: *\).*/\1Vorticis $VERSAO/" \
+    "$INC/etc/calamares/branding/vorticis/branding.desc"
 install -m 0755 "$RAIZ/installer/linux/vorticis-instalar-daqui" "$INC/usr/bin/"
 
 lb build 2>&1 | tee build.log

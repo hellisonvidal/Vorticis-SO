@@ -1,0 +1,15 @@
+#!/bin/sh
+# vorticis-instalar-sistema — abre o instalador gráfico (Calamares) no modo live.
+# O atalho original do Debian usa pkexec+xhost, que perdem a sessão Wayland do Vorticis;
+# aqui o instalador recebe o endereço da sessão do usuário e roda como administrador.
+set -e
+SESSAO="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${WAYLAND_DISPLAY:-wayland-0}"
+# Arquivo deixado pelo live-build que atrapalha o particionamento
+sudo mv /etc/fstab /etc/fstab.orig.calamares 2>/dev/null || true
+sudo install -d -m 700 /run/user/0
+status=0
+sudo env WAYLAND_DISPLAY="$SESSAO" XDG_RUNTIME_DIR=/run/user/0 \
+    QT_QPA_PLATFORM="wayland;xcb" DISPLAY="${DISPLAY:-}" QT_AUTO_SCREEN_SCALE_FACTOR=1 \
+    calamares "$@" || status=$?
+sudo mv /etc/fstab.orig.calamares /etc/fstab 2>/dev/null || true
+exit $status

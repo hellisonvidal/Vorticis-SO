@@ -29,7 +29,7 @@
 param(
   [int]$EspacoGB = 60,
   [string]$Iso,
-  [string]$Url = "https://github.com/hellisonvidal/Vorticis-SO/releases/download/v0.2/vorticis-0.2-amd64.iso",
+  [string]$Url = "",
   [switch]$Simular
 )
 
@@ -74,6 +74,15 @@ if ($novoTamanho -lt $suporte.SizeMin) {
 }
 
 # ---------- 2. ISO ----------
+if (-not $Iso -and -not $Url) {
+  # Versão mais recente publicada nas releases do GitHub
+  try {
+    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/hellisonvidal/Vorticis-SO/releases/latest" -Headers @{ "User-Agent" = "Instalador-Vorticis" }
+    $Url = ($rel.assets | Where-Object { $_.name -like "*.iso" } | Select-Object -First 1).browser_download_url
+    Info "Versão mais recente: $($rel.tag_name)"
+  } catch { }
+  if (-not $Url) { Falha "Não foi possível descobrir a versão mais recente. Use -Url ou -Iso." }
+}
 if (-not $Iso) {
   $Iso = Join-Path $env:TEMP "vorticis.iso"
   Executar "Baixar $Url" {

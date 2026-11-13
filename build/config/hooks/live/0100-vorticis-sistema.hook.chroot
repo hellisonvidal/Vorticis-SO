@@ -51,4 +51,14 @@ echo 'LANG=pt_BR.UTF-8' > /etc/default/locale
 
 # --- Tema de inicialização e ícones ---
 plymouth-set-default-theme vorticis || plymouth-set-default-theme spinner || true
+# Janela do instalador (Calamares) com o ícone do Vorticis: desvia o ícone do pacote
+find /usr/share/icons/hicolor -name 'calamares.*' 2>/dev/null | while read -r icone; do
+    dpkg-divert --local --rename --add "$icone" >/dev/null
+    tam=$(echo "$icone" | sed -n 's|.*/hicolor/\([0-9]*\)x[0-9]*/.*|\1|p')
+    if [ -n "$tam" ] && [ -f "/usr/share/icons/hicolor/${tam}x${tam}/apps/vorticis.png" ]; then
+        cp "/usr/share/icons/hicolor/${tam}x${tam}/apps/vorticis.png" "${icone%.*}.png"
+    else
+        cp /usr/share/icons/hicolor/scalable/apps/vorticis.svg "${icone%.*}.svg"
+    fi
+done
 gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
