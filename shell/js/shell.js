@@ -59,6 +59,7 @@
     icones: { estilo: "arredondado", tamanho: "m", anim: "elevar" },
     barra: { posicao: "inferior", alinhamento: "centro", tamanho: "auto", rotulos: "auto", opacidade: 100, ocultar: false },
     relogio: { formato: "24", segundos: false, data: true },
+    logo: { estilo: "tema", paleta: "tema" },
   };
 
   /* ======================================================================= Utilidades */
@@ -136,7 +137,13 @@
 
   const perfilAtual = () => prefs.ler("perfil", null) || (window.VORTICIS_USUARIO || {}).perfil || "basico";
   const perfil = () => estado.perfis[perfilAtual()] || estado.perfis.basico || PERFIS_PADRAO.basico;
-  const fixados = () => (prefs.ler("fixados." + perfilAtual(), null) || perfil().fixados).filter((id) => APPS[id]);
+  const NO_LIVE = !!(window.VORTICIS_USUARIO || {}).live || new URLSearchParams(location.search).get("live") === "1";
+  if (NO_LIVE) {
+    // Rodando pelo pen-drive: o instalador fica em destaque, fixado no início da barra.
+    APPS.instalar = { nome: "Instalar Vorticis SO", icone: "", logo: true, cor: "#0a84ff", cmd: "calamares-install-debian", cat: "Sistema" };
+  }
+  const fixados = () => (NO_LIVE ? ["instalar"] : []).concat(
+    (prefs.ler("fixados." + perfilAtual(), null) || perfil().fixados).filter((id) => APPS[id] && id !== "instalar"));
 
   /* ======================================================================= Aparência */
   function comAlfa(cor, alfa) {
@@ -178,6 +185,7 @@
   }
 
   function aplicarIcones() {
+    renderOpcoesLogo();
     const ic = prefs.obj("icones");
     document.body.dataset.icones = ic.estilo;
     document.body.dataset.tamIcone = ic.tamanho;
@@ -199,8 +207,49 @@
     $("#relogio-grande").hidden = !prefs.ler("relogioGrande", true);
   }
 
+  /* ======================================================================= Ícone do sistema */
+  // Por padrão o ícone segue o tema (formato e cores definidos em themes/*.json → "logo");
+  // o usuário pode trocar o formato e/ou as cores de forma independente do tema.
+  function logoAtual() {
+    const t = estado.temas[prefs.ler("tema", "mare")] || TEMA_PADRAO;
+    const doTema = t.logo || { estilo: "vortice", paleta: "mare" };
+    const escolha = prefs.obj("logo");
+    return {
+      estilo: escolha.estilo === "tema" ? doTema.estilo : escolha.estilo,
+      paleta: escolha.paleta === "tema" ? doTema.paleta : escolha.paleta,
+    };
+  }
+
+  function aplicarLogo() {
+    if (!window.VorticisLogo) return;
+    const l = logoAtual();
+    document.querySelectorAll(".logo-sistema[id]").forEach((e) => (e.innerHTML = VorticisLogo.svg({ ...l, id: e.id })));
+    const fav = $("#favicon");
+    if (fav) fav.href = "data:image/svg+xml," + encodeURIComponent(VorticisLogo.svg(l));
+  }
+
+  function renderOpcoesLogo() {
+    if (!window.VorticisLogo) return;
+    const escolha = prefs.obj("logo"), t = estado.temas[prefs.ler("tema", "mare")] || TEMA_PADRAO;
+    const doTema = t.logo || { estilo: "vortice", paleta: "mare" }, atual = logoAtual();
+    const amostra = (opc, id) => { const sp = el("span", { class: "logo-sistema" }); sp.innerHTML = VorticisLogo.svg({ ...opc, id }); return sp; };
+    $("#op-logo-estilo").replaceChildren(
+      el("button", { "aria-pressed": String(escolha.estilo === "tema"), onclick: () => { prefs.mudar("logo", "estilo", "tema"); aplicarTudo(); } },
+        [amostra({ estilo: doTema.estilo, paleta: atual.paleta }, "oe-tema"), "Do tema"]),
+      ...Object.entries(VorticisLogo.ESTILOS).map(([id, nome]) =>
+        el("button", { "aria-pressed": String(escolha.estilo === id), onclick: () => { prefs.mudar("logo", "estilo", id); aplicarTudo(); } },
+          [amostra({ estilo: id, paleta: atual.paleta }, "oe-" + id), nome])));
+    $("#op-logo-paleta").replaceChildren(
+      el("button", { "aria-pressed": String(escolha.paleta === "tema"), onclick: () => { prefs.mudar("logo", "paleta", "tema"); aplicarTudo(); } },
+        [amostra({ estilo: atual.estilo, paleta: doTema.paleta }, "op-tema"), "Do tema"]),
+      ...Object.entries(VorticisLogo.PALETAS).map(([id, pal]) =>
+        el("button", { "aria-pressed": String(escolha.paleta === id), onclick: () => { prefs.mudar("logo", "paleta", id); aplicarTudo(); } },
+          [amostra({ estilo: atual.estilo, paleta: id }, "op-" + id), pal.nome])));
+  }
+
   function aplicarTudo() {
     aplicarTema();
+    aplicarLogo();
     aplicarIcones();
     aplicarBarra();
     renderFixados();
@@ -211,6 +260,12 @@
   /* ======================================================================= Apps e janelas */
   function iconeApp(id) {
     const a = APPS[id] || { icone: "❔", cor: "#555" };
+    if (a.logo && window.VorticisLogo) {
+      // Apps do próprio sistema (instalador) usam o ícone do Vorticis, no formato escolhido.
+      const sp = el("span", { class: "icone icone-logo", "aria-hidden": "true" });
+      sp.innerHTML = VorticisLogo.svg({ ...logoAtual(), id: "app-" + id });
+      return sp;
+    }
     return el("span", { class: "icone", style: `--cor-app:${a.cor}`, "aria-hidden": "true", texto: a.icone });
   }
 
@@ -363,6 +418,7 @@
     });
     $("#op-relogio-grande").checked = prefs.ler("relogioGrande", true);
 
+    renderOpcoesLogo();
     const ic = prefs.obj("icones");
     segmentado("#op-icone-estilo", ic.estilo, (v) => { prefs.mudar("icones", "estilo", v); aplicarTudo(); });
     segmentado("#op-icone-tamanho", ic.tamanho, (v) => { prefs.mudar("icones", "tamanho", v); aplicarTudo(); });
@@ -484,6 +540,7 @@
     const usuario = window.VORTICIS_USUARIO || { nome: "Usuário", nivel: "Administrador" };
     $("#nome-usuario").textContent = usuario.nome;
     $("#nivel-usuario").textContent = usuario.nivel;
+    $("#versao-so").textContent = usuario.versao ? "versão " + usuario.versao : "";
     document.querySelector(".avatar").textContent = usuario.nome.charAt(0).toUpperCase();
 
     aplicarTudo();

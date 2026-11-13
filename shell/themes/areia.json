@@ -16,5 +16,9 @@
     "item": "rgba(80, 60, 30, 0.06)",
     "itemHover": "rgba(11, 127, 171, 0.14)"
   },
-  "animado": false
+  "animado": false,
+  "logo": {
+    "estilo": "onda",
+    "paleta": "areia"
+  }
 }

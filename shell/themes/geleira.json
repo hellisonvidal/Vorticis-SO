@@ -16,5 +16,9 @@
   },
   "efeito": "estatico",
   "fundoApp": "#eef7fd",
-  "claro": true
+  "claro": true,
+  "logo": {
+    "estilo": "vortice",
+    "paleta": "mare"
+  }
 }

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Instalar Vorticis SO
+GenericName=Instalador do sistema
+Comment=Instala o Vorticis SO neste computador
+Exec=calamares-install-debian
+Icon=vorticis
+Terminal=false
+Categories=System;
+StartupWMClass=calamares
+NoDisplay=false

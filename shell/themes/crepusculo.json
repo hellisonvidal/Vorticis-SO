@@ -23,5 +23,9 @@
     "amortecimento": 0.986,
     "gotasAmbiente": true
   },
-  "animado": true
+  "animado": true,
+  "logo": {
+    "estilo": "vortice",
+    "paleta": "crepusculo"
+  }
 }

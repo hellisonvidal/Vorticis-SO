@@ -41,7 +41,7 @@ lb config \
     --memtest none
 
 # Configuração versionada (listas de pacotes, hooks, arquivos extras)
-rm -rf config/package-lists config/hooks/live config/includes.chroot config/archives config/bootloaders
+rm -rf config/package-lists config/hooks/live config/includes.chroot config/includes.binary config/archives config/bootloaders
 cp -a "$AQUI/config/." config/
 # O live-build só executa config/hooks/live/* se config/hooks/normal/ também tiver hooks:
 # usa os hooks de limpeza padrão do próprio live-build.
@@ -70,6 +70,7 @@ VERSION_ID="$VERSAO"
 VERSION="$VERSAO"
 ID=vorticis
 ID_LIKE=debian
+LOGO=vorticis
 HOME_URL="https://github.com/hellisonvidal/Vorticis-SO"
 BUG_REPORT_URL="https://github.com/hellisonvidal/Vorticis-SO/issues"
 OSR

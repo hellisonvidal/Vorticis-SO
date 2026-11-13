@@ -49,5 +49,6 @@ update-alternatives --set x-www-browser /usr/bin/firefox-esr || true
 sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' /etc/locale.gen && locale-gen
 echo 'LANG=pt_BR.UTF-8' > /etc/default/locale
 
-# --- Tema Plymouth (provisório até o tema "gota d'água") ---
-plymouth-set-default-theme spinner || true
+# --- Tema de inicialização e ícones ---
+plymouth-set-default-theme vorticis || plymouth-set-default-theme spinner || true
+gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true

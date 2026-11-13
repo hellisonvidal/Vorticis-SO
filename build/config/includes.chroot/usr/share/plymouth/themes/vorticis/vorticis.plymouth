@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Vorticis
+Description=Tela de inicialização do Vorticis SO: o vórtice gira sobre o mar
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/vorticis
+ScriptFile=/usr/share/plymouth/themes/vorticis/vorticis.script

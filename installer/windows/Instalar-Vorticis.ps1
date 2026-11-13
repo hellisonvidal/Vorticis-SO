@@ -34,6 +34,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+try { $Host.UI.RawUI.WindowTitle = "Instalador do Vorticis SO" } catch { }
+Write-Host ""
+Write-Host "   ((@))   Vorticis SO — instalador para Windows" -ForegroundColor Cyan
+Write-Host "    ~~~    leve, bonito e seu" -ForegroundColor DarkCyan
+Write-Host ""
 $TamanhoInstaladorGB = 6
 
 function Info($t)  { Write-Host "» $t" -ForegroundColor Cyan }

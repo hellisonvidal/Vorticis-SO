@@ -20,5 +20,9 @@
     "corMeio": "#0f4c4c",
     "corBrilho": "#b9fff0"
   },
-  "animado": true
+  "animado": true,
+  "logo": {
+    "estilo": "redemoinho",
+    "paleta": "esmeralda"
+  }
 }

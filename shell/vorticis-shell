@@ -54,7 +54,9 @@ def usuario_atual():
             if len(partes) == 3 and partes[0] == login:
                 nivel, perfil = partes[1], partes[2]
     rotulos = {"admin": "Administrador", "padrao": "Padrão", "convidado": "Convidado", "infantil": "Infantil"}
-    return {"nome": nome, "nivel": rotulos.get(nivel, nivel), "perfil": perfil}
+    versao = Path("/etc/vorticis/versao").read_text().strip() if Path("/etc/vorticis/versao").exists() else ""
+    return {"nome": nome, "nivel": rotulos.get(nivel, nivel), "perfil": perfil, "versao": versao,
+            "live": Path("/run/live/medium").exists()}
 
 
 class Superficie:

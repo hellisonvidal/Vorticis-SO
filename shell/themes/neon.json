@@ -23,5 +23,9 @@
       "#7a00ff"
     ]
   },
-  "animado": true
+  "animado": true,
+  "logo": {
+    "estilo": "vortice",
+    "paleta": "neon"
+  }
 }

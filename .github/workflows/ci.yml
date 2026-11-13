@@ -89,4 +89,5 @@ jobs:
           files: |
             build/vorticis-*
             installer/windows/Instalar-Vorticis.ps1
+            installer/windows/vorticis.ico
             installer/linux/vorticis-instalar-daqui

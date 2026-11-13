@@ -14,6 +14,15 @@ que roda programas de **Linux, Windows e Android**.
 | ![Personalização com 12 temas](docs/captura-temas.png) | ![Central de Apps](docs/captura-central.png) |
 | ![Vorticis Music](docs/captura-music.png) | ![Barra no topo, tema Bolhas](docs/captura-bolhas.png) |
 
+## Ícone do sistema
+
+O ícone do Vorticis é um vórtice (da mesma família do [Vorticis Monitor](https://github.com/hellisonvidal/Vorticis-Monitor)).
+Ele acompanha o tema escolhido, mas pode ser trocado à parte em **Personalização → Ícones**: 5 formatos
+(Vórtice, Ciclone, Redemoinho, Onda, Gota) e 10 combinações de cores. A fonte única é
+[`shell/js/logo.js`](shell/js/logo.js); `node branding/gerar-logo.js` gera os arquivos usados no menu de boot,
+na tela de inicialização (Plymouth), no instalador (Calamares), no pen-drive (ícone da unidade no Windows) e
+nos ícones do sistema.
+
 ## Baixar e instalar
 
 Versões prontas ficam em **[Releases](https://github.com/hellisonvidal/Vorticis-SO/releases)** —

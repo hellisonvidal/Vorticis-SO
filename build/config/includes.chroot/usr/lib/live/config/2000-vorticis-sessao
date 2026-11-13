@@ -15,9 +15,14 @@ cat >> /etc/greetd/config.toml <<CONF
 command = "vorticis-sessao"
 user = "$USUARIO"
 CONF
-# Atalho do instalador na área de trabalho do live
+# Atalho do instalador na área de trabalho do live, com o ícone do Vorticis
 install -d "/home/$USUARIO/Área de Trabalho"
-if [ -f /usr/share/applications/calamares.desktop ]; then
-    cp /usr/share/applications/calamares.desktop "/home/$USUARIO/Área de Trabalho/Instalar Vorticis.desktop"
+cp /usr/share/applications/vorticis-instalar-sistema.desktop "/home/$USUARIO/Área de Trabalho/" 2>/dev/null || true
+# Esconde o atalho genérico "Install Debian" do pacote calamares-settings-debian
+if [ -f /usr/share/applications/calamares-install-debian.desktop ]; then
+    sed -i 's/^Name=.*/Name=Instalar Vorticis SO/; s/^Icon=.*/Icon=vorticis/; s/^StartupNotify=True/StartupNotify=true/' \
+        /usr/share/applications/calamares-install-debian.desktop
+    echo "NoDisplay=true" >> /usr/share/applications/calamares-install-debian.desktop
 fi
+rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
 chown -R "$USUARIO:" "/home/$USUARIO" 2>/dev/null || true

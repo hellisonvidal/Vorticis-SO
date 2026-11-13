@@ -20,5 +20,9 @@
     "corMeio": "#1679c9",
     "corBrilho": "#dff4ff"
   },
-  "animado": true
+  "animado": true,
+  "logo": {
+    "estilo": "redemoinho",
+    "paleta": "mare"
+  }
 }

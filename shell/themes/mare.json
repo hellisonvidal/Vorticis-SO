@@ -23,5 +23,9 @@
     "gotasAmbiente": true
   },
   "efeito": "agua",
-  "fundoApp": "#061a33"
+  "fundoApp": "#061a33",
+  "logo": {
+    "estilo": "vortice",
+    "paleta": "mare"
+  }
 }

@@ -23,5 +23,9 @@
       "#7b5cff"
     ]
   },
-  "animado": true
+  "animado": true,
+  "logo": {
+    "estilo": "onda",
+    "paleta": "esmeralda"
+  }
 }

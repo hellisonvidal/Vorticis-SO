@@ -22,9 +22,9 @@ strings:
   releaseNotesUrl:     https://github.com/hellisonvidal/Vorticis-SO/releases
 
 images:
-  productLogo:         "logo.svg"
-  productIcon:         "logo.svg"
-  productWelcome:      "logo.svg"
+  productLogo:         "logo.png"
+  productIcon:         "logo.png"
+  productWelcome:      "boasvindas.png"
 
 slideshow:             "show.qml"
 slideshowAPI:          2

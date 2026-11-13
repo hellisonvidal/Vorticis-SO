@@ -1,0 +1,37 @@
+# Vorticis SO — tela de inicialização (Plymouth, módulo script)
+Window.SetBackgroundTopColor(0.04, 0.43, 0.72);
+Window.SetBackgroundBottomColor(0.01, 0.10, 0.24);
+
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.x = Window.GetX() + Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
+logo.y = Window.GetY() + Window.GetHeight() / 2 - logo.image.GetHeight() / 2 - 40;
+logo.sprite.SetPosition(logo.x, logo.y, 1);
+
+titulo.image = Image.Text("Vorticis SO", 0.92, 0.96, 1, 1, "Sans Bold 26");
+titulo.sprite = Sprite(titulo.image);
+titulo.sprite.SetPosition(Window.GetX() + Window.GetWidth() / 2 - titulo.image.GetWidth() / 2, logo.y + logo.image.GetHeight() + 24, 1);
+
+angulo = 0;
+fun girar() {
+    # O vórtice gira devagar enquanto o sistema inicia
+    angulo += 0.04;
+    logo.sprite.SetImage(logo.image.Rotate(angulo));
+}
+Plymouth.SetRefreshFunction(girar);
+
+# Senha de disco criptografado
+fun pedir_senha(prompt, bolinhas) {
+    texto = prompt + "  ";
+    for (i = 0; i < bolinhas; i++)
+        texto = texto + "*";
+    msg.image = Image.Text(texto, 1, 1, 1, 1, "Sans 14");
+    msg.sprite = Sprite(msg.image);
+    msg.sprite.SetPosition(Window.GetX() + Window.GetWidth() / 2 - msg.image.GetWidth() / 2, Window.GetY() + Window.GetHeight() * 0.8, 2);
+}
+Plymouth.SetDisplayPasswordFunction(pedir_senha);
+
+fun voltar_ao_normal() {
+    msg.sprite = NULL;
+}
+Plymouth.SetDisplayNormalFunction(voltar_ao_normal);

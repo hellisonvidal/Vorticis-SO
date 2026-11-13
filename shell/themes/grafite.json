@@ -15,5 +15,9 @@
     "item": "rgba(255,255,255,0.06)",
     "itemHover": "rgba(255,255,255,0.13)"
   },
-  "animado": false
+  "animado": false,
+  "logo": {
+    "estilo": "vortice",
+    "paleta": "grafite"
+  }
 }
