@@ -25,3 +25,7 @@ polkitd
 bash-completion
 python3
 systemd-oomd
+pciutils
+usbutils
+libnotify-bin
+smartmontools

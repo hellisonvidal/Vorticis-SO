@@ -15,7 +15,7 @@ const PADRAO = { estilo: "vortice", paleta: "mare" };
 const TAMANHOS = [16, 24, 32, 48, 64, 128, 256, 512];
 
 const B = path.join(RAIZ, "branding");
-const INC = path.join(RAIZ, "build/config/includes.chroot");
+const PKG = path.join(RAIZ, "pacote/raiz");  // arquivos do pacote vorticis-sistema
 const BIN = path.join(RAIZ, "build/config/includes.binary");
 
 function escrever(arq, conteudo) {
@@ -36,9 +36,9 @@ for (const t of TAMANHOS) {
 execFileSync("convert", [16, 24, 32, 48, 64, 128, 256].map((t) => path.join(B, "png", `vorticis-${t}.png`)).concat(path.join(B, "vorticis.ico")));
 
 // Ícones do sistema (tema hicolor), usados pelo menu, instalador e janelas
-for (const t of TAMANHOS) copiar(path.join(B, "png", `vorticis-${t}.png`), path.join(INC, `usr/share/icons/hicolor/${t}x${t}/apps/vorticis.png`));
-copiar(path.join(B, "vorticis.svg"), path.join(INC, "usr/share/icons/hicolor/scalable/apps/vorticis.svg"));
-copiar(path.join(B, "png/vorticis-256.png"), path.join(INC, "usr/share/pixmaps/vorticis.png"));
+for (const t of TAMANHOS) copiar(path.join(B, "png", `vorticis-${t}.png`), path.join(PKG, `usr/share/icons/hicolor/${t}x${t}/apps/vorticis.png`));
+copiar(path.join(B, "vorticis.svg"), path.join(PKG, "usr/share/icons/hicolor/scalable/apps/vorticis.svg"));
+copiar(path.join(B, "png/vorticis-256.png"), path.join(PKG, "usr/share/pixmaps/vorticis.png"));
 
 // Calamares (instalador gráfico)
 const CAL = path.join(RAIZ, "installer/calamares/branding/vorticis");
@@ -47,7 +47,7 @@ copiar(path.join(B, "png/vorticis-256.png"), path.join(CAL, "logo.png"));
 copiar(path.join(B, "png/vorticis-512.png"), path.join(CAL, "boasvindas.png"));
 
 // Plymouth (tela de inicialização): fundo arredondado parado + vórtice girando por cima
-const PLY = path.join(INC, "usr/share/plymouth/themes/vorticis");
+const PLY = path.join(PKG, "usr/share/plymouth/themes/vorticis");
 for (const parte of ["fundo", "bracos"]) {
   const arq = path.join(B, `vorticis-${parte}.svg`);
   escrever(arq, L.svg({ ...PADRAO, parte, id: parte }));

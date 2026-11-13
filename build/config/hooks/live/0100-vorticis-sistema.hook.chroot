@@ -8,6 +8,13 @@ for k in $(ls -1 /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||'); do
     [ "$k" = "$atual" ] || apt-get purge -y "linux-image-$k" || true
 done
 
+# --- Pacotes do GRUB "de plataforma" guardados para o instalador ---
+# grub-efi-amd64 (UEFI) e grub-pc (BIOS) não podem ser instalados juntos; o Calamares
+# instala no disco o que corresponde ao firmware (ver shellprocess-vorticis.conf), para
+# que as atualizações de kernel continuem atualizando o menu de boot.
+install -d /usr/share/vorticis/pacotes
+(cd /usr/share/vorticis/pacotes && apt-get download grub-efi-amd64 grub-pc)
+
 # --- Android: Waydroid (repositório oficial do projeto) ---
 if apt-get install -y curl ca-certificates gnupg; then
     curl -fsSL https://repo.waydro.id/waydroid.gpg -o /usr/share/keyrings/waydroid.gpg \

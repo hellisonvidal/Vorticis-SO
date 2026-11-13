@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dispositivos
+Comment=Hardware, drivers e firmware
+Exec=vorticis-app dispositivos
+Icon=preferences-system
+Categories=Settings;HardwareSettings;System;
+Terminal=false
+StartupWMClass=org.vorticis.Dispositivos

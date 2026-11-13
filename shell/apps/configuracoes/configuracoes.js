@@ -7,6 +7,25 @@
   // Cada ação: [rótulo, comando, argumentos, {terminal, primario, campos}]
   const SECOES = [
     { id: "sobre", icone: "💧", nome: "Sobre o sistema", desc: "Versão, hardware e tempo ligado.", inicial: ["vorticis-sistema", ["info"]], grupos: [] },
+    { id: "atualizacoes", icone: "🔄", nome: "Atualizações", desc: "Novas versões do Vorticis, do sistema, dos apps e do firmware — tudo por dentro do sistema.",
+      inicial: ["vorticis-atualizar", ["verificar"]], grupos: [
+        { titulo: "Atualizar", acoes: [["⬇️ Atualizar tudo", "vorticis-atualizar", ["instalar"], { primario: true, terminal: true }],
+          ["🌀 Só o Vorticis", "vorticis-atualizar", ["instalar", "--so-vorticis"], { terminal: true }],
+          ["🛍️ Abrir na Central de Apps", "@abrir", ["central", "atualizacoes"]]] },
+        { titulo: "Verificação automática", desc: "Procura novidades a cada 12 horas e avisa na área de trabalho. Atualizações de segurança do Debian já são automáticas.",
+          acoes: [["Ligar", "vorticis-atualizar", ["automatico", "ligar"]], ["Desligar", "vorticis-atualizar", ["automatico", "desligar"]],
+            ["Situação", "vorticis-atualizar", ["automatico", "status"]]] },
+      ] },
+    { id: "dispositivos", icone: "🧩", nome: "Dispositivos e drivers", desc: "Todo o hardware do computador, o driver de cada dispositivo e busca de drivers.",
+      inicial: ["vorticis-dispositivos", ["listar"]], grupos: [
+        { titulo: "Gerenciador", acoes: [["🧩 Abrir Dispositivos", "@abrir", ["dispositivos"], { primario: true }],
+          ["🔍 Procurar drivers", "vorticis-drivers", ["sugerir"]]] },
+      ] },
+    { id: "diagnostico", icone: "🩺", nome: "Diagnóstico", desc: "Verifica serviços, pacotes, discos, memória, temperatura, drivers, rede, segurança e atualizações.",
+      inicial: null, grupos: [
+        { titulo: "Verificar", acoes: [["🩺 Abrir Diagnóstico", "@abrir", ["diagnostico"], { primario: true }],
+          ["Verificar aqui", "vorticis-diagnostico", ["verificar"]], ["📄 Salvar relatório", "vorticis-diagnostico", ["relatorio"]]] },
+      ] },
     { id: "tela", icone: "🖥️", nome: "Tela e resolução", desc: "Todas as resoluções e taxas que o monitor suporta, escala automática para telas de alta densidade e vários monitores.",
       inicial: ["vorticis-tela", ["listar"]], grupos: [
         { titulo: "Ajustes rápidos", acoes: [["✨ Melhor resolução automática", "vorticis-tela", ["auto", "--salvar"], { primario: true }],
@@ -63,6 +82,10 @@
         { titulo: "Verificar jogo", campos: [["jogo", "Nome do jogo (ex.: Elden Ring)"]], acoes: [["Verificar", "vorticis-jogos", (v) => ["verificar", v.jogo], { primario: true }],
           ["Alternativas", "vorticis-jogos", (v) => ["alternativas", v.jogo || "jogo"]]] },
         { titulo: "Preparar", acoes: [["Steam + Proton + anti-cheat", "vorticis-jogos", ["preparar"], { terminal: true }], ["Otimizar para jogos", "vorticis-jogos", ["otimizar"], { terminal: true }]] },
+      ] },
+    { id: "ajuda", icone: "❓", nome: "Ajuda", desc: "Manual do usuário, referência de comandos e solução de problemas.", inicial: null, grupos: [
+        { titulo: "Documentação", acoes: [["📘 Abrir a Ajuda", "@abrir", ["ajuda"], { primario: true }],
+          ["⌨️ Referência de comandos", "@abrir", ["ajuda", "REFERENCIA.md"]]] },
       ] },
     { id: "navegadores", icone: "🌐", nome: "Navegadores", desc: "Instale e escolha o navegador padrão.", inicial: ["vorticis-navegadores", ["listar"]], grupos: [
         { titulo: "Navegador padrão", campos: [["nav", "firefox | chromium | chrome | brave | edge | opera | vivaldi"]],

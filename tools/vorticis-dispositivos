@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+"""vorticis-dispositivos — gerenciador de dispositivos do Vorticis SO.
+
+Uso:
+  vorticis-dispositivos listar [--json] [--categoria NOME]   todo o hardware, agrupado por categoria
+  vorticis-dispositivos info ID [--json]                     propriedades de um dispositivo
+  vorticis-dispositivos drivers ID [--json]                  drivers sugeridos para o dispositivo
+  vorticis-dispositivos desativar ID [--simular]             desliga (Wi-Fi/Bluetooth, USB, rede)
+  vorticis-dispositivos ativar ID [--simular]
+  vorticis-dispositivos reiniciar-driver ID [--simular]      recarrega o módulo do driver
+  vorticis-dispositivos ejetar ID [--simular]                remove com segurança (pen-drive, HD externo)
+
+IDs: pci:0000:00:02.0 · usb:1-2 · disco:sda · rede:wlan0 · entrada:event3 · camera:video0 ·
+     bateria:BAT0 · monitor:card0-HDMI-A-1 · som:card0 · cpu:0 · memoria:0 · impressora:NOME
+Estados: ok · sem-driver · desativado · desconectado · aviso
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+SYS = Path(os.environ.get("VORTICIS_SYSFS", "/sys"))
+AQUI = Path(__file__).resolve().parent
+DRIVERS = str(AQUI / "vorticis-drivers") if (AQUI / "vorticis-drivers").exists() else "vorticis-drivers"
+
+CATEGORIAS = [
+    ("processador", "Processador", "🧠"), ("memoria", "Memória", "🧮"), ("video", "Vídeo", "🖥️"),
+    ("monitor", "Monitores", "🖵"), ("som", "Som", "🔊"), ("rede", "Rede", "🌐"), ("bluetooth", "Bluetooth", "🔷"),
+    ("armazenamento", "Armazenamento", "💽"), ("usb", "USB", "🔌"), ("entrada", "Teclado, mouse e toque", "⌨️"),
+    ("camera", "Câmeras", "📷"), ("impressora", "Impressoras e scanners", "🖨️"), ("energia", "Bateria e energia", "🔋"),
+    ("sistema", "Dispositivos do sistema", "⚙️"),
+]
+CLASSE_PCI = {
+    "03": "video", "04": "som", "02": "rede", "01": "armazenamento", "0c03": "usb", "0d11": "bluetooth",
+    "0c0a": "usb", "0c05": "sistema", "06": "sistema", "08": "sistema", "11": "sistema", "05": "memoria",
+}
+CLASSE_USB = {"01": "som", "02": "rede", "03": "entrada", "06": "camera", "07": "impressora", "08": "armazenamento",
+              "09": "usb", "0e": "camera", "e0": "bluetooth", "0b": "sistema", "ef": None, "ff": None, "00": None}
+
+
+def ler(p, padrao=""):
+    try:
+        return Path(p).read_text(errors="replace").strip()
+    except OSError:
+        return padrao
+
+
+def driver_de(caminho):
+    d = Path(caminho) / "driver"
+    return Path(os.readlink(d)).name if d.is_symlink() else None
+
+
+def rodar(cmd, timeout=10):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+_nomes_pci = None
+
+
+def nomes_pci():
+    """Nomes legíveis via lspci (base pci.ids)."""
+    global _nomes_pci
+    if _nomes_pci is None:
+        _nomes_pci = {}
+        for linha in rodar(["lspci", "-mm", "-D"]).splitlines():
+            partes = re.findall(r'"([^"]*)"|(\S+)', linha)
+            campos = [a or b for a, b in partes]
+            if len(campos) >= 4:
+                _nomes_pci[campos[0]] = (campos[2], campos[3])
+    return _nomes_pci
+
+
+def disp(id_, categoria, nome, fabricante="", driver=None, estado="ok", detalhes=None, acoes=None):
+    return {"id": id_, "categoria": categoria, "nome": nome or id_, "fabricante": fabricante, "driver": driver,
+            "estado": estado, "detalhes": {k: v for k, v in (detalhes or {}).items() if v not in (None, "")},
+            "acoes": acoes or []}
+
+
+def pci():
+    base = SYS / "bus/pci/devices"
+    for d in sorted(base.glob("*")) if base.exists() else []:
+        classe = ler(d / "class").replace("0x", "")
+        cat = CLASSE_PCI.get(classe[:4]) or CLASSE_PCI.get(classe[:2]) or "sistema"
+        if cat == "rede" and classe[:4] == "0280":
+            cat = "rede"
+        fab, nome = nomes_pci().get(d.name, ("", ""))
+        drv = driver_de(d)
+        importante = cat in ("video", "som", "rede", "bluetooth", "armazenamento")
+        estado = "ok" if drv else ("sem-driver" if importante else "ok")
+        yield disp("pci:" + d.name, cat, nome or f"Dispositivo PCI {ler(d / 'device')}", fab, drv, estado, {
+            "Endereço": d.name, "Fabricante (ID)": ler(d / "vendor"), "Modelo (ID)": ler(d / "device"),
+            "Classe": "0x" + classe, "Módulo do kernel": drv, "Firmware/Modalias": ler(d / "modalias"),
+        }, ["procurar-driver"] + (["reiniciar-driver"] if drv else []))
+
+
+def usb():
+    base = SYS / "bus/usb/devices"
+    for d in sorted(base.glob("*")) if base.exists() else []:
+        if ":" in d.name or not (d / "idVendor").exists() or ler(d / "idVendor") == "1d6b":
+            continue
+        classes = [ler(i / "bInterfaceClass") for i in sorted(d.glob(f"{d.name}:*"))]
+        cat = next((CLASSE_USB.get(c) for c in classes if CLASSE_USB.get(c)), None) or CLASSE_USB.get(ler(d / "bDeviceClass")) or "usb"
+        drivers = sorted({driver_de(i) for i in d.glob(f"{d.name}:*") if driver_de(i)})
+        autorizado = ler(d / "authorized", "1") == "1"
+        estado = "desativado" if not autorizado else ("ok" if drivers else "sem-driver")
+        velocidade = ler(d / "speed")
+        yield disp("usb:" + d.name, cat, ler(d / "product") or "Dispositivo USB", ler(d / "manufacturer"),
+                   ", ".join(drivers) or None, estado, {
+                       "Porta": d.name, "Fabricante (ID)": ler(d / "idVendor"), "Modelo (ID)": ler(d / "idProduct"),
+                       "Velocidade": f"{velocidade} Mb/s" if velocidade else "", "Número de série": ler(d / "serial"),
+                       "Consumo máximo": ler(d / "bMaxPower"),
+                   }, ["procurar-driver", "ativar" if not autorizado else "desativar"])
+
+
+def discos():
+    base = SYS / "block"
+    for d in sorted(base.glob("*")) if base.exists() else []:
+        if d.name.startswith(("loop", "ram", "zram", "dm-", "sr")) and not d.name.startswith("sr"):
+            continue
+        if d.name.startswith(("loop", "ram", "zram", "dm-")):
+            continue
+        setores = int(ler(d / "size", "0") or 0)
+        removivel = ler(d / "removable") == "1"
+        rotacional = ler(d / "queue/rotational") == "1"
+        tipo = "CD/DVD" if d.name.startswith("sr") else ("NVMe SSD" if d.name.startswith("nvme") else ("HD" if rotacional else "SSD"))
+        if removivel and not d.name.startswith("sr"):
+            tipo = "Removível (pen-drive/cartão)"
+        nome = ler(d / "device/model") or ler(d / "device/name") or d.name
+        tam = setores * 512
+        yield disp("disco:" + d.name, "armazenamento", nome, ler(d / "device/vendor"), driver_de(d / "device") or driver_de(d / "device/device"),
+                   "ok", {"Dispositivo": f"/dev/{d.name}", "Tipo": tipo, "Capacidade": f"{tam / 1e9:.1f} GB" if tam else "",
+                          "Partições": ", ".join(sorted(p.name for p in d.glob(f"{d.name}*") if p.name != d.name))},
+                   (["ejetar"] if removivel or d.name.startswith("sr") else []))
+
+
+def redes():
+    base = SYS / "class/net"
+    for d in sorted(base.glob("*")) if base.exists() else []:
+        if d.name == "lo" or not (d / "device").exists():
+            continue
+        sem_fio = (d / "wireless").exists() or (d / "phy80211").exists()
+        operando = ler(d / "operstate")
+        estado = "ok" if operando == "up" else ("desconectado" if ler(d / "carrier", "0") != "1" else "ok")
+        bloqueado = False
+        for rf in (d / "phy80211").glob("rfkill*") if sem_fio else []:
+            bloqueado = ler(rf / "soft") == "1" or ler(rf / "hard") == "1"
+        if bloqueado:
+            estado = "desativado"
+        yield disp("rede:" + d.name, "rede", ("Wi-Fi " if sem_fio else "Rede cabeada ") + d.name, "", driver_de(d / "device"),
+                   estado, {"Interface": d.name, "Endereço MAC": ler(d / "address"), "Estado": operando,
+                            "Velocidade": (ler(d / "speed") + " Mb/s") if ler(d / "speed", "-1") not in ("-1", "") else ""},
+                   ["ativar" if bloqueado else "desativar", "reiniciar-driver"])
+
+
+def bluetooth():
+    base = SYS / "class/bluetooth"
+    for d in sorted(base.glob("hci*")) if base.exists() else []:
+        bloqueado = any(ler(rf / "soft") == "1" for rf in d.glob("rfkill*"))
+        yield disp("bluetooth:" + d.name, "bluetooth", f"Adaptador Bluetooth {d.name}", "", driver_de(d / "device"),
+                   "desativado" if bloqueado else "ok", {"Adaptador": d.name, "Endereço": ler(d / "address")},
+                   ["ativar" if bloqueado else "desativar"])
+
+
+def entradas():
+    bloco = ler("/proc/bus/input/devices")
+    for item in bloco.split("\n\n"):
+        nome = re.search(r'N: Name="([^"]*)"', item)
+        handlers = re.search(r"H: Handlers=(.*)", item)
+        if not nome or not handlers:
+            continue
+        h = handlers.group(1)
+        evento = re.search(r"event\d+", h)
+        n = nome.group(1)
+        if not evento or re.search(r"Power Button|Sleep Button|Video Bus|PC Speaker|HDA|HDMI|Lid Switch", n, re.I):
+            continue
+        tipo = "Teclado" if "kbd" in h else ("Touchpad" if re.search("touchpad", n, re.I) else ("Mouse" if "mouse" in h else "Entrada"))
+        yield disp("entrada:" + evento.group(0), "entrada", n, "", None, "ok", {"Tipo": tipo, "Evento": "/dev/input/" + evento.group(0)})
+
+
+def cameras():
+    for d in sorted((SYS / "class/video4linux").glob("video*")) if (SYS / "class/video4linux").exists() else []:
+        if ler(d / "index", "0") != "0":
+            continue  # cada câmera expõe vários nós; mostra só o principal
+        yield disp("camera:" + d.name, "camera", ler(d / "name") or d.name, "", driver_de(d / "device"), "ok",
+                   {"Dispositivo": "/dev/" + d.name})
+
+
+def som():
+    for d in sorted((SYS / "class/sound").glob("card*")) if (SYS / "class/sound").exists() else []:
+        nome = ler(f"/proc/asound/{d.name}/id") or d.name
+        yield disp("som:" + d.name, "som", ler(d / "device/../product") or nome, "", driver_de(d / "device"), "ok",
+                   {"Placa": d.name, "Identificação": nome}, ["reiniciar-driver"])
+
+
+def monitores():
+    for d in sorted((SYS / "class/drm").glob("card*-*")) if (SYS / "class/drm").exists() else []:
+        status = ler(d / "status")
+        if status != "connected":
+            continue
+        nome = d.name.split("-", 1)[1]
+        edid = (d / "edid").read_bytes() if (d / "edid").exists() else b""
+        modelo = ""
+        for i in range(54, 126, 18):  # descritores de texto do EDID (nome do monitor)
+            if len(edid) >= i + 18 and edid[i:i + 3] == b"\x00\x00\x00" and edid[i + 3] == 0xFC:
+                modelo = edid[i + 5:i + 18].decode("ascii", "ignore").strip()
+        modos = ler(d / "modes").splitlines()
+        yield disp("monitor:" + d.name, "monitor", modelo or f"Monitor {nome}", "", None, "ok",
+                   {"Conector": nome, "Resolução máxima": modos[0] if modos else "", "Modos disponíveis": str(len(modos))})
+
+
+def energia():
+    for d in sorted((SYS / "class/power_supply").glob("*")) if (SYS / "class/power_supply").exists() else []:
+        tipo = ler(d / "type")
+        if tipo == "Battery":
+            cheia, projeto = ler(d / "energy_full") or ler(d / "charge_full"), ler(d / "energy_full_design") or ler(d / "charge_full_design")
+            saude = f"{int(cheia) * 100 // int(projeto)}%" if cheia.isdigit() and projeto.isdigit() and int(projeto) else ""
+            estado = "aviso" if saude and int(saude[:-1]) < 60 else "ok"
+            yield disp("bateria:" + d.name, "energia", f"Bateria {ler(d / 'model_name') or d.name}", ler(d / "manufacturer"), None, estado,
+                       {"Carga": ler(d / "capacity") + "%", "Situação": ler(d / "status"), "Saúde": saude,
+                        "Ciclos": ler(d / "cycle_count"), "Tecnologia": ler(d / "technology")})
+        elif tipo == "Mains":
+            yield disp("energia:" + d.name, "energia", "Fonte de energia (tomada)", "", None,
+                       "ok" if ler(d / "online") == "1" else "desconectado", {"Conectada": "sim" if ler(d / "online") == "1" else "não"})
+
+
+def processador_memoria():
+    info = ler("/proc/cpuinfo")
+    modelo = next((l.split(":", 1)[1].strip() for l in info.splitlines() if l.startswith("model name")), "Processador")
+    nucleos = os.cpu_count()
+    fab = "Intel" if "GenuineIntel" in info else "AMD" if "AuthenticAMD" in info else ""
+    micro = next((l.split(":", 1)[1].strip() for l in info.splitlines() if l.startswith("microcode")), "")
+    freq = ler(SYS / "devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+    yield disp("cpu:0", "processador", modelo, fab, ler(SYS / "devices/system/cpu/cpu0/cpufreq/scaling_driver") or None, "ok",
+               {"Núcleos/threads": str(nucleos), "Frequência máxima": f"{int(freq) / 1e6:.2f} GHz" if freq.isdigit() else "",
+                "Microcódigo": micro, "Virtualização": "sim" if re.search(r"\b(vmx|svm)\b", info) else "não"}, ["procurar-driver"])
+    mem = next((int(l.split()[1]) for l in ler("/proc/meminfo").splitlines() if l.startswith("MemTotal")), 0)
+    yield disp("memoria:0", "memoria", f"Memória RAM {mem / 1024 / 1024:.1f} GB", "", None, "ok",
+               {"Total": f"{mem / 1024 / 1024:.1f} GB", "Swap comprimida (zram)": "ativa" if Path("/dev/zram0").exists() else "inativa"})
+
+
+def impressoras():
+    if not shutil.which("lpstat"):
+        return
+    for linha in rodar(["lpstat", "-v"]).splitlines():
+        m = re.match(r"device for (\S+): (.*)", linha) or re.match(r"dispositivo para (\S+): (.*)", linha)
+        if m:
+            yield disp("impressora:" + m.group(1), "impressora", m.group(1), "", "CUPS", "ok", {"Conexão": m.group(2)})
+
+
+FONTES = [processador_memoria, pci, usb, discos, redes, bluetooth, entradas, cameras, som, monitores, energia, impressoras]
+
+
+def todos():
+    vistos, lista = set(), []
+    for fonte in FONTES:
+        try:
+            for d in fonte():
+                if d["id"] not in vistos:
+                    vistos.add(d["id"])
+                    lista.append(d)
+        except Exception as e:  # uma fonte com problema não derruba o gerenciador inteiro
+            print(f"aviso: {fonte.__name__}: {e}", file=sys.stderr)
+    return lista
+
+
+def achar(id_):
+    for d in todos():
+        if d["id"] == id_:
+            return d
+    sys.exit(f"Dispositivo não encontrado: {id_}")
+
+
+def cmd_listar(a):
+    lista = [d for d in todos() if not a.categoria or d["categoria"] == a.categoria]
+    if a.json:
+        print(json.dumps({"categorias": [{"id": c, "nome": n, "icone": i} for c, n, i in CATEGORIAS], "dispositivos": lista},
+                         ensure_ascii=False))
+        return
+    for cid, nome, icone in CATEGORIAS:
+        itens = [d for d in lista if d["categoria"] == cid]
+        if itens:
+            print(f"\n{icone} {nome}")
+            for d in itens:
+                marca = {"ok": "✔", "sem-driver": "⚠", "desativado": "⏻", "desconectado": "–", "aviso": "⚠"}.get(d["estado"], "?")
+                print(f"   {marca} {d['nome'][:48]:<48} {d['driver'] or '-':<16} {d['id']}")
+
+
+def cmd_info(a):
+    d = achar(a.id)
+    if a.json:
+        print(json.dumps(d, ensure_ascii=False))
+        return
+    print(f"{d['nome']}  ({d['id']})\n  Estado: {d['estado']}  ·  Driver: {d['driver'] or 'nenhum'}")
+    for k, v in d["detalhes"].items():
+        print(f"  {k}: {v}")
+
+
+def cmd_drivers(a):
+    r = subprocess.run([sys.executable, DRIVERS, "sugerir", "--json", "--dispositivo", a.id], capture_output=True, text=True)
+    lista = json.loads(r.stdout or "[]")
+    if a.json:
+        print(json.dumps(lista, ensure_ascii=False))
+    elif not lista:
+        print("Nenhum driver adicional encontrado para este dispositivo: ele usa o driver do kernel.")
+    else:
+        for s in lista:
+            print(f"  {'✔ instalado' if s['instalado'] else '• disponível'}  {s['pacote']} — {s['motivo']}")
+
+
+def executar(cmd, simular, root=False):
+    if root and os.geteuid() != 0:
+        cmd = (["pkexec"] if shutil.which("pkexec") else ["sudo"]) + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(cmd))
+    return 0 if simular else subprocess.run(cmd).returncode
+
+
+def alternar(a, ligar):
+    tipo, _, nome = a.id.partition(":")
+    if tipo == "rede":
+        if (SYS / f"class/net/{nome}/phy80211").exists():
+            return sys.exit(executar(["rfkill", "unblock" if ligar else "block", "wlan"], a.simular))
+        return sys.exit(executar(["nmcli", "device", "connect" if ligar else "disconnect", nome], a.simular))
+    if tipo == "bluetooth":
+        return sys.exit(executar(["rfkill", "unblock" if ligar else "block", "bluetooth"], a.simular))
+    if tipo == "usb":
+        caminho = SYS / f"bus/usb/devices/{nome}/authorized"
+        return sys.exit(executar(["sh", "-c", f"echo {1 if ligar else 0} > {caminho}"], a.simular, root=True))
+    sys.exit("Este tipo de dispositivo não pode ser desligado por aqui.")
+
+
+def cmd_reiniciar(a):
+    d = achar(a.id) if not a.simular else {"driver": "exemplo"}
+    modulo = (d.get("driver") or "").split(",")[0].strip()
+    if not modulo:
+        sys.exit("Este dispositivo não tem driver carregado.")
+    sys.exit(executar(["sh", "-c", f"modprobe -r {modulo} && modprobe {modulo}"], a.simular, root=True))
+
+
+def cmd_ejetar(a):
+    tipo, _, nome = a.id.partition(":")
+    if tipo != "disco":
+        sys.exit("Só discos removíveis podem ser ejetados.")
+    if shutil.which("udisksctl") or a.simular:
+        for linha in rodar(["lsblk", "-lnpo", "NAME,MOUNTPOINT", f"/dev/{nome}"]).splitlines():
+            partes = linha.split(None, 1)
+            if len(partes) == 2:
+                executar(["udisksctl", "unmount", "-b", partes[0]], a.simular)
+        sys.exit(executar(["udisksctl", "power-off", "-b", f"/dev/{nome}"], a.simular))
+    sys.exit(executar(["eject", f"/dev/{nome}"], a.simular))
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-dispositivos", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("listar"); p.add_argument("--json", action="store_true"); p.add_argument("--categoria"); p.set_defaults(f=cmd_listar)
+    for n, f in (("info", cmd_info), ("drivers", cmd_drivers)):
+        p = sub.add_parser(n); p.add_argument("id"); p.add_argument("--json", action="store_true"); p.set_defaults(f=f)
+    for n, f in (("desativar", lambda a: alternar(a, False)), ("ativar", lambda a: alternar(a, True)),
+                 ("reiniciar-driver", cmd_reiniciar), ("ejetar", cmd_ejetar)):
+        p = sub.add_parser(n); p.add_argument("id"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=f)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

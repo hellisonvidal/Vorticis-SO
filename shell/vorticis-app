@@ -4,7 +4,8 @@
 Uso:
   vorticis-app musica [ARQUIVOS...]
   vorticis-app video [ARQUIVOS...]
-  vorticis-app central | configuracoes [--secao ID] | monitor | notas | calculadora
+  vorticis-app central | configuracoes | dispositivos | diagnostico | ajuda [--secao ID]
+  vorticis-app monitor | notas | calculadora
 
 Os apps são páginas HTML em /usr/share/vorticis/shell/apps renderizadas pelo WebKitGTK. A ponte
 "vorticis" permite que a página execute APENAS as ferramentas vorticis-* (lista fixa abaixo),
@@ -35,9 +36,13 @@ APPS = {
     "monitor":       ("Vorticis Monitor", "org.vorticis.Monitor", (980, 700)),
     "notas":         ("Vorticis Notas", "org.vorticis.Notas", (900, 620)),
     "calculadora":   ("Vorticis Calculadora", "org.vorticis.Calculadora", (380, 600)),
+    "dispositivos":  ("Dispositivos", "org.vorticis.Dispositivos", (1080, 700)),
+    "diagnostico":   ("Diagnóstico", "org.vorticis.Diagnostico", (900, 720)),
+    "ajuda":         ("Ajuda do Vorticis", "org.vorticis.Ajuda", (1080, 740)),
 }
 PERMITIDOS = {"vorticis-apps", "vorticis-sistema", "vorticis-midia", "vorticis-tela", "vorticis-drivers", "vorticis-rede",
-              "vorticis-usuarios", "vorticis-recursos", "vorticis-backup", "vorticis-compat", "vorticis-jogos", "vorticis-navegadores"}
+              "vorticis-usuarios", "vorticis-recursos", "vorticis-backup", "vorticis-compat", "vorticis-jogos", "vorticis-navegadores",
+              "vorticis-dispositivos", "vorticis-diagnostico", "vorticis-atualizar"}
 
 
 def terminal(cmd):
@@ -100,6 +105,12 @@ class Janela:
             return
         ident, cmd = dados.get("id", 0), dados.get("cmd", "")
         args = [str(a) for a in dados.get("args", [])]
+        if cmd == "@abrir":
+            # Abrir outro app Vorticis (ex.: do Diagnóstico para Dispositivos)
+            if not args or args[0] not in APPS:
+                return self.responder(ident, 126, "App desconhecido.")
+            subprocess.Popen(["vorticis-app"] + args[:1] + (["--secao", args[1]] if len(args) > 1 else []), start_new_session=True)
+            return self.responder(ident, 0, "")
         if cmd == "@terminal":
             if not args or args[0] not in PERMITIDOS:
                 return self.responder(ident, 126, "Comando não permitido.")

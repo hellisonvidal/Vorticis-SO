@@ -3,3 +3,5 @@ build/*.iso
 build/*.iso.sha256
 __pycache__/
 *.pyc
+build/*.deb
+build/*.deb.sha256

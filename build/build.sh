@@ -50,19 +50,13 @@ if [ -z "$(ls config/hooks/normal 2>/dev/null)" ]; then
     for h in /usr/share/live/build/hooks/normal/*.chroot; do ln -s "$h" config/hooks/normal/; done
 fi
 
-# Componentes próprios do Vorticis → dentro do sistema
+# Componentes próprios do Vorticis: pacote vorticis-sistema (o mesmo que o
+# vorticis-atualizar instala nas atualizações), instalado pela lista de pacotes locais.
 INC=config/includes.chroot
-install -d "$INC/usr/bin" "$INC/usr/lib/vorticis" "$INC/usr/share/vorticis/compat" "$INC/etc/vorticis" "$INC/usr/share/applications"
-for f in "$RAIZ"/tools/vorticis-*; do install -m 0755 "$f" "$INC/usr/bin/"; done
-install -m 0644 "$RAIZ/tools/compat/receitas.json" "$INC/usr/share/vorticis/compat/receitas.json"
-install -m 0755 "$RAIZ/tools/vorticis-rede" "$INC/usr/lib/vorticis/vorticis-rede"
-rm -rf "$INC/usr/share/vorticis/shell"
-cp -a "$RAIZ/shell" "$INC/usr/share/vorticis/shell"
-install -m 0755 "$RAIZ/shell/vorticis-shell" "$INC/usr/bin/vorticis-shell"
-install -m 0755 "$RAIZ/shell/vorticis-app" "$INC/usr/bin/vorticis-app"
-install -m 0755 "$RAIZ/shell/vorticis-sessao" "$INC/usr/bin/vorticis-sessao"
-install -m 0644 "$RAIZ"/shell/desktop/*.desktop "$INC/usr/share/applications/"
-echo "$VERSAO" > "$INC/etc/vorticis/versao"
+rm -rf config/packages.chroot && mkdir -p config/packages.chroot
+DEB=$(sh "$RAIZ/pacote/gerar-deb.sh" "$VERSAO" config/packages.chroot)
+echo "vorticis-sistema" > config/package-lists/vorticis.list.chroot
+install -d "$INC/etc" "$INC/usr/bin"
 cat > "$INC/etc/os-release" <<OSR
 PRETTY_NAME="Vorticis SO $VERSAO"
 NAME="Vorticis SO"
@@ -74,11 +68,6 @@ LOGO=vorticis
 HOME_URL="https://github.com/hellisonvidal/Vorticis-SO"
 BUG_REPORT_URL="https://github.com/hellisonvidal/Vorticis-SO/issues"
 OSR
-install -m 0644 "$RAIZ/security/nftables.conf" "$INC/etc/vorticis/nftables.conf"
-install -D -m 0644 "$RAIZ/security/resolved.conf" "$INC/etc/systemd/resolved.conf.d/90-vorticis.conf"
-install -D -m 0644 "$RAIZ/security/networkmanager-privacidade.conf" "$INC/etc/NetworkManager/conf.d/90-vorticis-privacidade.conf"
-install -D -m 0644 "$RAIZ/security/sysctl-rede.conf" "$INC/etc/sysctl.d/80-vorticis-rede.conf"
-install -D -m 0644 "$RAIZ/security/vorticis-rede.service" "$INC/etc/systemd/system/vorticis-rede.service"
 rm -rf "$INC/etc/calamares"
 cp -a "$RAIZ/installer/calamares" "$INC/etc/calamares"
 # Versão do instalador = versão desta build
@@ -88,6 +77,8 @@ sed -i -e "s/^\(  *version: *\).*/\1$VERSAO/" -e "s/^\(  *shortVersion: *\).*/\1
 install -m 0755 "$RAIZ/installer/linux/vorticis-instalar-daqui" "$INC/usr/bin/"
 
 lb build 2>&1 | tee build.log
+# Pacote do Vorticis também sai como artefato (é publicado nas releases para as atualizações)
+cp "$DEB" "$AQUI/" && (cd "$AQUI" && sha256sum "$(basename "$DEB")" > "$(basename "$DEB").sha256")
 
 ISO="$(ls -1 "$TRABALHO"/*.iso 2>/dev/null | head -n1)"
 [ -n "$ISO" ] || { echo "Falha: nenhuma ISO gerada (veja $TRABALHO/build.log)" >&2; exit 1; }

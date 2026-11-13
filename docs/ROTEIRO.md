@@ -17,7 +17,14 @@
 - [x] Ícone no menu de boot, na tela de inicialização (Plymouth), no instalador e no pen-drive
 - [x] Login automático do pen-drive estável sem GPU; instalador abrindo pela sessão Wayland
 
-## v0.3 "Maré alta" — experiência
+## v0.3.0 — dispositivos, diagnóstico e atualizações ✔
+- [x] Gerenciador de dispositivos com busca de drivers por dispositivo
+- [x] Diagnóstico do sistema com correções e relatório
+- [x] Pacote vorticis-sistema e atualizações por dentro do sistema
+- [x] Documentação completa e app Ajuda
+- [x] GRUB do sistema instalado (UEFI/BIOS) corrigido no instalador
+
+## v0.4 "Maré alta" — experiência
 - [ ] Teste automático de boot da ISO em QEMU (UEFI e BIOS) no CI
 - [ ] Tela de login gráfica com o tema do usuário
 - [ ] Lista de janelas abertas na barra no SO real (wlr-foreign-toplevel)

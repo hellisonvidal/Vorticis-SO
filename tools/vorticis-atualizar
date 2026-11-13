@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""vorticis-atualizar — atualizações do Vorticis SO por dentro do sistema.
+
+Uso:
+  vorticis-atualizar verificar [--json] [--rapido] [--notificar]
+        novidades do Vorticis (releases do GitHub) + sistema (apt), apps (Flatpak) e firmware
+  vorticis-atualizar instalar [--so-vorticis] [--simular]
+        instala a versão nova do Vorticis (pacote vorticis-sistema, com SHA-256 conferido)
+        e depois tudo o que estiver pendente
+  vorticis-atualizar automatico {ligar,desligar,status}
+        verificação automática (a cada 12 h) com aviso na área de trabalho
+
+As atualizações de segurança do Debian já são instaladas sozinhas (unattended-upgrades).
+"""
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+REPO = "hellisonvidal/Vorticis-SO"
+API = f"https://api.github.com/repos/{REPO}/releases/latest"
+PACOTE = "vorticis-sistema"
+AQUI = Path(__file__).resolve().parent
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "vorticis"
+
+
+def ferramenta(nome):
+    return str(AQUI / nome) if (AQUI / nome).exists() else nome
+
+
+def rodar(cmd, timeout=120):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+
+
+def versao_instalada():
+    if shutil.which("dpkg-query"):
+        codigo, v = rodar(["dpkg-query", "-W", "-f=${Version}", PACOTE])
+        if codigo == 0 and v.strip():
+            return v.strip()
+    for arq in ("/usr/share/vorticis/versao", "/etc/vorticis/versao"):
+        if Path(arq).exists():
+            return Path(arq).read_text().strip()
+    return "0"
+
+
+def mais_nova(a, b):
+    """True se a versão a é mais nova que b (regras do Debian)."""
+    if shutil.which("dpkg"):
+        return subprocess.run(["dpkg", "--compare-versions", a, "gt", b]).returncode == 0
+    conv = lambda v: [int(x) if x.isdigit() else x for x in v.replace("-", ".").split(".")]
+    try:
+        return conv(a) > conv(b)
+    except TypeError:
+        return a > b
+
+
+def ultima_release(usar_cache=True):
+    arq = CACHE / "release.json"
+    if usar_cache and arq.exists() and time.time() - arq.stat().st_mtime < 6 * 3600:
+        return json.loads(arq.read_text())
+    req = urllib.request.Request(API, headers={"User-Agent": "vorticis-atualizar", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        dados = json.loads(r.read().decode())
+    rel = {"versao": dados.get("tag_name", "").lstrip("v"), "nome": dados.get("name", ""), "notas": dados.get("body", ""),
+           "pagina": dados.get("html_url", ""), "deb": None, "sha256": None}
+    for a in dados.get("assets", []):
+        if a["name"].startswith(PACOTE + "_") and a["name"].endswith(".deb"):
+            rel["deb"] = a["browser_download_url"]
+        elif a["name"].startswith(PACOTE + "_") and a["name"].endswith(".deb.sha256"):
+            rel["sha256"] = a["browser_download_url"]
+    CACHE.mkdir(parents=True, exist_ok=True)
+    arq.write_text(json.dumps(rel))
+    return rel
+
+
+def estado_vorticis(usar_cache=True):
+    instalada = versao_instalada()
+    try:
+        rel = ultima_release(usar_cache)
+    except Exception as e:
+        return {"instalada": instalada, "mais_recente": None, "disponivel": False, "erro": f"Sem acesso às releases: {e}"}
+    disponivel = bool(rel["versao"]) and bool(rel["deb"]) and mais_nova(rel["versao"], instalada)
+    return {"instalada": instalada, "mais_recente": rel["versao"], "disponivel": disponivel, "nome": rel["nome"],
+            "notas": rel["notas"], "pagina": rel["pagina"], "pacote": rel["deb"]}
+
+
+def pendencias(rapido):
+    if rapido:
+        lista = []
+        if shutil.which("apt"):
+            _, saida = rodar(["apt", "list", "--upgradable"])
+            lista = [{"nome": l.split("/")[0], "tipo": "Sistema"} for l in saida.splitlines() if "/" in l and "[" in l]
+        return lista
+    codigo, saida = rodar([sys.executable, ferramenta("vorticis-apps"), "atualizacoes", "--json"], timeout=300)
+    try:
+        return json.loads(saida)
+    except ValueError:
+        return []
+
+
+def notificar(v, total):
+    if not shutil.which("notify-send"):
+        return
+    partes = []
+    if v.get("disponivel"):
+        partes.append(f"Vorticis SO {v['mais_recente']} está disponível.")
+    if total:
+        partes.append(f"{total} atualização(ões) de sistema e apps.")
+    if not partes:
+        return
+    r = subprocess.run(["notify-send", "-i", "vorticis", "-a", "Vorticis SO", "-A", "abrir=Atualizar agora", "-w",
+                        "-t", "30000", "Atualizações disponíveis", " ".join(partes)], capture_output=True, text=True)
+    if r.stdout.strip() == "abrir":
+        subprocess.Popen(["vorticis-app", "central", "--secao", "atualizacoes"], start_new_session=True)
+
+
+def cmd_verificar(a):
+    v = estado_vorticis(usar_cache=not a.notificar)
+    lista = pendencias(a.rapido)
+    total = len(lista)
+    if a.json:
+        print(json.dumps({"vorticis": v, "sistema": lista, "total": total}, ensure_ascii=False))
+    else:
+        if v.get("erro"):
+            print(f"Vorticis SO {v['instalada']} — {v['erro']}")
+        elif v["disponivel"]:
+            print(f"★ Nova versão do Vorticis: {v['mais_recente']} (instalada: {v['instalada']})")
+            print(f"  Notas: {v['pagina']}")
+        else:
+            print(f"✔ Vorticis SO {v['instalada']} é a versão mais recente.")
+        print(f"{total} atualização(ões) de sistema/apps/firmware pendente(s).")
+        for x in lista[:20]:
+            print(f"  [{x.get('tipo', '')}] {x['nome']} {x.get('versao', '')}")
+    if a.notificar:
+        notificar(v, total)
+
+
+def baixar(url, destino):
+    req = urllib.request.Request(url, headers={"User-Agent": "vorticis-atualizar"})
+    with urllib.request.urlopen(req, timeout=60) as r, open(destino, "wb") as f:
+        shutil.copyfileobj(r, f)
+
+
+def executar(cmd, simular, root=False):
+    if root and os.geteuid() != 0:
+        cmd = (["pkexec"] if shutil.which("pkexec") else ["sudo"]) + cmd
+    print(("[simulação] " if simular else "→ ") + " ".join(map(str, cmd)), flush=True)
+    return 0 if simular else subprocess.run(list(map(str, cmd))).returncode
+
+
+def cmd_instalar(a):
+    v = estado_vorticis(usar_cache=False)
+    if v.get("disponivel"):
+        print(f"Atualizando o Vorticis SO {v['instalada']} → {v['mais_recente']}")
+        CACHE.mkdir(parents=True, exist_ok=True)
+        deb = CACHE / Path(v["pacote"]).name
+        if a.simular:
+            print(f"[simulação] baixar {v['pacote']} e conferir o SHA-256")
+        else:
+            baixar(v["pacote"], deb)
+            rel = ultima_release(usar_cache=True)
+            if rel.get("sha256"):
+                soma = CACHE / (deb.name + ".sha256")
+                baixar(rel["sha256"], soma)
+                esperado = soma.read_text().split()[0]
+                obtido = hashlib.sha256(deb.read_bytes()).hexdigest()
+                if esperado != obtido:
+                    deb.unlink(missing_ok=True)
+                    sys.exit("✘ O pacote baixado não confere com o SHA-256 publicado: atualização cancelada.")
+                print("✔ Pacote conferido (SHA-256).")
+            else:
+                sys.exit("✘ A release não publica o SHA-256 do pacote: atualização cancelada por segurança.")
+        if executar(["apt-get", "install", "-y", "--allow-downgrades", str(deb)], a.simular, root=True) != 0:
+            sys.exit("Falha ao instalar o pacote do Vorticis.")
+        print(f"✔ Vorticis SO {v['mais_recente']} instalado. Saia e entre de novo para ver as novidades da área de trabalho.")
+    elif v.get("erro"):
+        print(v["erro"])
+    else:
+        print(f"Vorticis SO {v['instalada']} já é a versão mais recente.")
+    if not a.so_vorticis:
+        sys.exit(executar([sys.executable, ferramenta("vorticis-apps"), "atualizar"] + (["--simular"] if a.simular else []), False))
+
+
+def cmd_automatico(a):
+    if a.acao == "status":
+        _, ativo = rodar(["systemctl", "--user", "is-enabled", "vorticis-atualizar.timer"])
+        print("Verificação automática: " + ("ligada" if ativo.strip() == "enabled" else "desligada"))
+        return
+    acao = ["enable", "--now"] if a.acao == "ligar" else ["disable", "--now"]
+    codigo = subprocess.run(["systemctl", "--user"] + acao + ["vorticis-atualizar.timer"]).returncode
+    print("Verificação automática " + ("ligada (a cada 12 horas)." if a.acao == "ligar" else "desligada.") if codigo == 0 else "Falha.")
+    sys.exit(codigo)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-atualizar", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("verificar"); p.add_argument("--json", action="store_true"); p.add_argument("--rapido", action="store_true")
+    p.add_argument("--notificar", action="store_true"); p.set_defaults(f=cmd_verificar)
+    p = sub.add_parser("instalar"); p.add_argument("--so-vorticis", action="store_true"); p.add_argument("--simular", action="store_true")
+    p.set_defaults(f=cmd_instalar)
+    p = sub.add_parser("automatico"); p.add_argument("acao", choices=["ligar", "desligar", "status"]); p.set_defaults(f=cmd_automatico)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

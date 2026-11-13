@@ -3,8 +3,8 @@
 
 Uso:
   vorticis-drivers listar              mostra o hardware detectado
-  vorticis-drivers sugerir [--json]    lista drivers/firmwares recomendados
-  vorticis-drivers instalar [--auto] [--simular]
+  vorticis-drivers sugerir [--json] [--dispositivo ID]    drivers/firmwares recomendados
+  vorticis-drivers instalar [PACOTE...] [--dispositivo ID] [--auto] [--simular]
   vorticis-drivers firmware [--simular]  atualiza BIOS/UEFI e firmware de dispositivos (fwupd/LVFS)
   vorticis-drivers kernel-recente [--simular]  kernel/firmware do backports para hardware muito novo
 
@@ -122,20 +122,25 @@ FIRMWARE_POR_PREFIXO = {
 
 
 def sugerir():
-    """Retorna lista de (pacote, motivo)."""
+    """Lista de sugestões: pacote, motivo, se já está instalado e os dispositivos que o pedem."""
     sug = {}
+    atual = [None]  # dispositivo em análise (ex.: "pci:0000:01:00.0"), para o Gerenciador de Dispositivos
 
     def add(pac, motivo):
-        sug.setdefault(pac, motivo)
+        item = sug.setdefault(pac, {"motivo": motivo, "dispositivos": []})
+        if atual[0] and atual[0] not in item["dispositivos"]:
+            item["dispositivos"].append(atual[0])
 
     pci = list(dispositivos_pci())
     usb = list(dispositivos_usb())
 
     cpu = fabricante_cpu()
+    atual[0] = "cpu:0"
     if cpu:
         add(f"{cpu}64-microcode" if cpu == "amd" else "intel-microcode", "correções de segurança e estabilidade da CPU")
 
     for d in pci:
+        atual[0] = "pci:" + d["endereco"]
         v, cat = d["vendor"], d["categoria"]
         if cat == "vídeo":
             add("mesa-vulkan-drivers", "Vulkan (necessário para DXVK/Proton e jogos)")
@@ -176,15 +181,19 @@ def sugerir():
         if cat in ("wi-fi", "rede cabeada") and not d["driver"]:
             add("@kernel-recente", f"{d['fabricante']} {d['vendor']}:{d['device']} sem driver no kernel atual — kernel mais novo (backports) costuma resolver")
 
+    atual[0] = None
     gpus = {d["vendor"] for d in pci if d["categoria"] == "vídeo"}
     if len(gpus) > 1:
         add("switcheroo-control", "notebook com duas GPUs: permite abrir apps/jogos na GPU dedicada")
     if fabricante_cpu() == "intel":
+        atual[0] = "cpu:0"
         add("thermald", "controle térmico Intel (evita superaquecimento e quedas de desempenho)")
+    atual[0] = None
     if any((SYS / "bus/iio/devices").glob("iio:device*")):
         add("iio-sensor-proxy", "sensores de rotação/luz (tela gira e brilho automático em 2-em-1)")
 
     for d in usb:
+        atual[0] = "usb:" + d["endereco"]
         if d["categoria"] == "bluetooth":
             mapa = {"8087": "firmware-iwlwifi", "0bda": "firmware-realtek", "0a5c": "firmware-brcm80211", "0e8d": "firmware-mediatek"}
             if d["vendor"] in mapa:
@@ -207,6 +216,7 @@ def sugerir():
         if d["categoria"] == "outro" and re.search(r"scan", d.get("nome") or "", re.I):
             add("sane-airscan", "scanner (protocolo eSCL/WSD, sem driver)")
 
+    atual[0] = None
     for fw in firmware_faltando():
         for prefixo, pacote in FIRMWARE_POR_PREFIXO.items():
             if fw.startswith(prefixo):
@@ -219,7 +229,8 @@ def sugerir():
             add(linha.strip(), "recomendado pelo isenkram para o hardware detectado")
 
     instalados = pacotes_instalados([p for p in sug if not p.startswith("@")])
-    return [{"pacote": p, "motivo": m, "instalado": p in instalados} for p, m in sug.items()]
+    return [{"pacote": p, "motivo": i["motivo"], "dispositivos": i["dispositivos"], "instalado": p in instalados}
+            for p, i in sug.items()]
 
 
 def pacotes_instalados(nomes):
@@ -253,6 +264,8 @@ def cmd_listar(_a):
 
 def cmd_sugerir(a):
     lista = sugerir()
+    if a.dispositivo:
+        lista = [s for s in lista if a.dispositivo in s["dispositivos"]]
     if a.json:
         print(json.dumps(lista, ensure_ascii=False, indent=2))
         return
@@ -264,6 +277,10 @@ def cmd_sugerir(a):
 
 def cmd_instalar(a):
     faltando = [s for s in sugerir() if not s["instalado"]]
+    if a.pacotes:
+        faltando = [s for s in faltando if s["pacote"] in a.pacotes]
+    if a.dispositivo:
+        faltando = [s for s in faltando if a.dispositivo in s["dispositivos"]]
     if not faltando:
         print("Tudo atualizado. ✔")
         return
@@ -316,8 +333,10 @@ def main():
     ap = argparse.ArgumentParser(prog="vorticis-drivers", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("listar").set_defaults(f=cmd_listar)
-    p = sub.add_parser("sugerir"); p.add_argument("--json", action="store_true"); p.set_defaults(f=cmd_sugerir)
-    p = sub.add_parser("instalar"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_instalar)
+    p = sub.add_parser("sugerir"); p.add_argument("--json", action="store_true")
+    p.add_argument("--dispositivo", help="só o que este dispositivo precisa (ex.: pci:0000:01:00.0)"); p.set_defaults(f=cmd_sugerir)
+    p = sub.add_parser("instalar"); p.add_argument("pacotes", nargs="*", help="só estes pacotes sugeridos")
+    p.add_argument("--dispositivo", help="só os drivers deste dispositivo"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_instalar)
     p = sub.add_parser("kernel-recente"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_kernel_recente)
     p = sub.add_parser("firmware"); p.add_argument("--auto", action="store_true"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_firmware)
     a = ap.parse_args()

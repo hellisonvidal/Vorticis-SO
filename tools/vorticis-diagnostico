@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""vorticis-diagnostico — verifica o sistema inteiro em busca de erros e problemas.
+
+Uso:
+  vorticis-diagnostico verificar [--json]       roda todas as verificações
+  vorticis-diagnostico corrigir ID [--simular]  aplica a correção sugerida de uma verificação
+  vorticis-diagnostico relatorio [ARQUIVO]      salva um relatório completo (para pedir ajuda)
+
+Áreas: serviços, pacotes, discos e espaço, saúde dos discos (SMART), memória, temperatura,
+erros do kernel, dispositivos sem driver, firmware faltando, rede, DNS, firewall, relógio,
+atualizações, bateria, inicialização segura e pontos de restauração.
+Estados: ok · aviso · erro · info
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+
+
+def ferramenta(nome):
+    return str(AQUI / nome) if (AQUI / nome).exists() else nome
+
+
+def rodar(cmd, timeout=20):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout.strip(), r.stderr.strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, "", str(e)
+
+
+def tem(b):
+    return shutil.which(b) is not None
+
+
+def item(id_, area, titulo, estado, detalhe="", correcao=None):
+    return {"id": id_, "area": area, "titulo": titulo, "estado": estado, "detalhe": detalhe, "correcao": correcao}
+
+
+# Correções conhecidas: id → (descrição, comando, precisa de administrador)
+CORRECOES = {
+    "pacotes": ("Reparar pacotes interrompidos", ["sh", "-c", "dpkg --configure -a && apt-get -f install -y"], True),
+    "servicos": ("Reiniciar serviços com falha", ["sh", "-c", "for s in $(systemctl --failed --plain --no-legend | awk '{print $1}'); do systemctl restart \"$s\"; done; systemctl reset-failed"], True),
+    "espaco": ("Liberar espaço (caches, logs antigos, lixeira)", [ferramenta("vorticis-recursos"), "limpar"], False),
+    "firewall": ("Ligar o firewall", ["systemctl", "enable", "--now", "vorticis-rede.service"], True),
+    "relogio": ("Sincronizar o relógio pela internet", ["timedatectl", "set-ntp", "true"], True),
+    "drivers": ("Instalar drivers recomendados", [ferramenta("vorticis-drivers"), "instalar", "--auto"], True),
+    "firmware": ("Instalar firmware faltando", [ferramenta("vorticis-drivers"), "instalar", "--auto"], True),
+    "atualizacoes": ("Atualizar o sistema", [ferramenta("vorticis-atualizar"), "instalar"], True),
+    "zram": ("Ativar memória comprimida (zram) e proteção contra travamentos", [ferramenta("vorticis-recursos"), "aplicar"], True),
+    "flatpak": ("Reparar apps Flatpak", ["flatpak", "repair"], True),
+    "restauracao": ("Ligar pontos de restauração automáticos", [ferramenta("vorticis-backup"), "automatico", "ligar"], True),
+}
+
+
+def correcao(id_):
+    if id_ not in CORRECOES:
+        return None
+    desc, cmd, root = CORRECOES[id_]
+    return {"id": id_, "descricao": desc, "administrador": root}
+
+
+# ------------------------------------------------------------------------- verificações
+def v_servicos():
+    if not tem("systemctl"):
+        return []
+    _, saida, _ = rodar(["systemctl", "--failed", "--plain", "--no-legend"])
+    falhos = [l.split()[0] for l in saida.splitlines() if l.strip()]
+    if falhos:
+        return [item("servicos", "Sistema", f"{len(falhos)} serviço(s) com falha", "erro", ", ".join(falhos[:8]), correcao("servicos"))]
+    return [item("servicos", "Sistema", "Serviços do sistema", "ok", "Nenhum serviço com falha")]
+
+
+def v_pacotes():
+    if not tem("dpkg"):
+        return []
+    _, auditoria, _ = rodar(["dpkg", "--audit"])
+    if auditoria:
+        return [item("pacotes", "Sistema", "Pacotes com instalação incompleta", "erro", auditoria.splitlines()[0][:200], correcao("pacotes"))]
+    return [item("pacotes", "Sistema", "Pacotes do sistema", "ok", "Todos os pacotes estão íntegros")]
+
+
+def v_espaco():
+    res, vistos = [], set()
+    for linha in Path("/proc/mounts").read_text().splitlines():
+        dev, ponto, tipo = linha.split()[:3]
+        if not dev.startswith("/dev/") or dev in vistos or tipo in ("squashfs", "iso9660", "vfat"):
+            continue
+        vistos.add(dev)
+        try:
+            u = shutil.disk_usage(ponto)
+        except OSError:
+            continue
+        if u.total < 2 * 1024 ** 3:
+            continue
+        livre = u.free / u.total
+        gb = u.free / 1024 ** 3
+        estado = "erro" if livre < 0.05 else "aviso" if livre < 0.10 else "ok"
+        res.append(item("espaco", "Armazenamento", f"Espaço livre em {ponto}", estado,
+                        f"{gb:.1f} GB livres ({livre * 100:.0f}%)", correcao("espaco") if estado != "ok" else None))
+    return res
+
+
+def v_smart():
+    if not tem("smartctl"):
+        return []
+    res = []
+    discos = [d.name for d in Path("/sys/block").glob("*") if re.match(r"(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)$", d.name)]
+    for d in discos:
+        if os.geteuid() != 0:
+            res.append(item("smart", "Armazenamento", f"Saúde do disco {d}", "info", "Requer administrador: rode 'sudo vorticis-diagnostico verificar'"))
+            break
+        codigo, saida, _ = rodar(["smartctl", "-H", f"/dev/{d}"])
+        if "PASSED" in saida or ": OK" in saida:
+            res.append(item("smart", "Armazenamento", f"Saúde do disco {d}", "ok", "SMART: aprovado"))
+        elif "FAILED" in saida:
+            res.append(item("smart", "Armazenamento", f"Saúde do disco {d}", "erro", "SMART indica falha iminente: faça backup agora!"))
+    return res
+
+
+def v_memoria():
+    m = {l.split(":")[0]: int(l.split()[1]) for l in Path("/proc/meminfo").read_text().splitlines() if l.split()[1].isdigit()}
+    disp = m.get("MemAvailable", 0) / max(1, m.get("MemTotal", 1))
+    res = [item("memoria", "Desempenho", "Memória disponível", "aviso" if disp < 0.1 else "ok", f"{disp * 100:.0f}% livre")]
+    zram = Path("/sys/block/zram0").exists() and m.get("SwapTotal", 0) > 0
+    res.append(item("zram", "Desempenho", "Memória comprimida (zram)", "ok" if zram else "aviso",
+                    "Ativa" if zram else "Inativa: o sistema pode travar quando a memória acabar", None if zram else correcao("zram")))
+    return res
+
+
+def v_temperatura():
+    temps = []
+    for z in Path("/sys/class/hwmon").glob("hwmon*"):
+        for t in z.glob("temp*_input"):
+            try:
+                temps.append(int(t.read_text()) / 1000)
+            except (OSError, ValueError):
+                pass
+    if not temps:
+        return []
+    maxima = max(temps)
+    estado = "erro" if maxima >= 95 else "aviso" if maxima >= 85 else "ok"
+    return [item("temperatura", "Hardware", "Temperatura", estado,
+                 f"Máxima: {maxima:.0f} °C" + (" — verifique ventilação e poeira" if estado != "ok" else ""))]
+
+
+def v_kernel():
+    if not tem("journalctl"):
+        return []
+    codigo, saida, _ = rodar(["journalctl", "-k", "-b", "-p", "err", "--no-pager", "-q", "-o", "cat"])
+    if codigo != 0:
+        return [item("kernel", "Hardware", "Erros do kernel", "info", "Sem permissão para ler o registro (entre como administrador)")]
+    linhas = [l for l in saida.splitlines() if l.strip() and not re.search(r"firmware|Bluetooth: hci0: (?:Malformed|Failed to load)", l)]
+    if not linhas:
+        return [item("kernel", "Hardware", "Erros do kernel", "ok", "Nenhum erro desde a inicialização")]
+    return [item("kernel", "Hardware", f"{len(linhas)} erro(s) do kernel desde a inicialização", "aviso", " | ".join(linhas[-3:])[:300])]
+
+
+def v_dispositivos():
+    codigo, saida, _ = rodar([sys.executable, ferramenta("vorticis-dispositivos"), "listar", "--json"], timeout=40)
+    try:
+        lista = json.loads(saida)["dispositivos"]
+    except (ValueError, KeyError):
+        return []
+    sem = [d for d in lista if d["estado"] == "sem-driver"]
+    if sem:
+        return [item("drivers", "Dispositivos", f"{len(sem)} dispositivo(s) sem driver", "aviso",
+                     ", ".join(d["nome"] for d in sem[:5]), correcao("drivers"))]
+    return [item("drivers", "Dispositivos", "Drivers dos dispositivos", "ok", f"{len(lista)} dispositivos funcionando")]
+
+
+def v_firmware():
+    codigo, saida, _ = rodar([sys.executable, ferramenta("vorticis-drivers"), "sugerir", "--json"], timeout=60)
+    try:
+        faltando = [s for s in json.loads(saida) if not s["instalado"] and "firmware" in s["motivo"].lower()]
+    except ValueError:
+        return []
+    if faltando:
+        return [item("firmware", "Dispositivos", "Firmware faltando", "aviso", ", ".join(s["pacote"] for s in faltando), correcao("firmware"))]
+    return [item("firmware", "Dispositivos", "Firmware dos dispositivos", "ok", "Nenhum firmware faltando")]
+
+
+def v_rede():
+    res = []
+    if tem("nmcli"):
+        _, con, _ = rodar(["nmcli", "-t", "networking", "connectivity"])
+        estado = {"full": "ok", "limited": "aviso", "portal": "aviso"}.get(con, "erro")
+        res.append(item("rede", "Rede", "Conexão com a internet", estado,
+                        {"full": "Conectado", "limited": "Conexão limitada", "portal": "Rede pede login (portal)"}.get(con, "Sem conexão")))
+    try:
+        socket.setdefaulttimeout(5)
+        socket.getaddrinfo("deb.debian.org", 443)
+        res.append(item("dns", "Rede", "Resolução de nomes (DNS)", "ok", "Funcionando"))
+    except OSError:
+        res.append(item("dns", "Rede", "Resolução de nomes (DNS)", "erro", "Não foi possível resolver endereços"))
+    if tem("systemctl"):
+        _, ativo, _ = rodar(["systemctl", "is-active", "vorticis-rede.service"])
+        res.append(item("firewall", "Segurança", "Firewall", "ok" if ativo == "active" else "erro",
+                        "Ativo: conexões de entrada bloqueadas" if ativo == "active" else "Desligado", None if ativo == "active" else correcao("firewall")))
+    return res
+
+
+def v_relogio():
+    if not tem("timedatectl"):
+        return []
+    _, saida, _ = rodar(["timedatectl", "show", "-p", "NTPSynchronized", "--value"])
+    ok = saida == "yes"
+    return [item("relogio", "Sistema", "Relógio sincronizado", "ok" if ok else "aviso",
+                 "Sincronizado pela internet" if ok else "Não sincronizado (certificados e logins podem falhar)", None if ok else correcao("relogio"))]
+
+
+def v_atualizacoes():
+    codigo, saida, _ = rodar([sys.executable, ferramenta("vorticis-atualizar"), "verificar", "--json", "--rapido"], timeout=60)
+    try:
+        d = json.loads(saida)
+    except ValueError:
+        return []
+    n = d.get("total", 0)
+    vorticis = d.get("vorticis", {})
+    detalhe = f"{n} atualização(ões) pendente(s)"
+    if vorticis.get("disponivel"):
+        detalhe += f" · Vorticis {vorticis.get('mais_recente')} disponível"
+    estado = "aviso" if n or vorticis.get("disponivel") else "ok"
+    return [item("atualizacoes", "Sistema", "Atualizações", estado, detalhe if estado != "ok" else "Sistema em dia",
+                 correcao("atualizacoes") if estado != "ok" else None)]
+
+
+def v_bateria():
+    res = []
+    for b in Path("/sys/class/power_supply").glob("BAT*"):
+        def ler(n):
+            try:
+                return (b / n).read_text().strip()
+            except OSError:
+                return ""
+        cheia, projeto = ler("energy_full") or ler("charge_full"), ler("energy_full_design") or ler("charge_full_design")
+        if cheia.isdigit() and projeto.isdigit() and int(projeto):
+            saude = int(cheia) * 100 // int(projeto)
+            res.append(item("bateria", "Hardware", f"Saúde da bateria {b.name}", "aviso" if saude < 60 else "ok",
+                            f"{saude}% da capacidade original" + (" — considere trocar a bateria" if saude < 60 else "")))
+    return res
+
+
+def v_seguranca():
+    res = []
+    if tem("mokutil"):
+        _, sb, _ = rodar(["mokutil", "--sb-state"])
+        if sb:
+            res.append(item("secureboot", "Segurança", "Inicialização segura (Secure Boot)", "info", sb.splitlines()[0]))
+    aa = Path("/sys/module/apparmor/parameters/enabled")
+    if aa.exists():
+        ok = aa.read_text().strip() == "Y"
+        res.append(item("apparmor", "Segurança", "Isolamento de apps (AppArmor)", "ok" if ok else "aviso", "Ativo" if ok else "Desativado"))
+    return res
+
+
+def v_restauracao():
+    raiz_btrfs = any(l.split()[1] == "/" and l.split()[2] == "btrfs" for l in Path("/proc/mounts").read_text().splitlines())
+    if not raiz_btrfs:
+        return [item("restauracao", "Proteção", "Pontos de restauração", "info", "Disponível apenas com Btrfs (padrão do instalador)")]
+    _, ativo, _ = rodar(["systemctl", "is-enabled", "snapper-timeline.timer"])
+    ok = ativo == "enabled"
+    return [item("restauracao", "Proteção", "Pontos de restauração automáticos", "ok" if ok else "aviso",
+                 "Ligados" if ok else "Desligados", None if ok else correcao("restauracao"))]
+
+
+def v_flatpak():
+    if not tem("flatpak"):
+        return []
+    codigo, _, erro = rodar(["flatpak", "list", "--app"])
+    return [] if codigo == 0 else [item("flatpak", "Apps", "Apps Flatpak", "aviso", erro[:200], correcao("flatpak"))]
+
+
+VERIFICACOES = [v_servicos, v_pacotes, v_espaco, v_smart, v_memoria, v_temperatura, v_kernel, v_dispositivos,
+                v_firmware, v_rede, v_relogio, v_atualizacoes, v_bateria, v_seguranca, v_restauracao, v_flatpak]
+
+
+def verificar():
+    res = []
+    for v in VERIFICACOES:
+        try:
+            res.extend(v())
+        except Exception as e:  # uma verificação com problema não interrompe as outras
+            res.append(item(v.__name__, "Diagnóstico", f"Falha ao verificar ({v.__name__[2:]})", "info", str(e)[:200]))
+    return res
+
+
+def cmd_verificar(a):
+    res = verificar()
+    resumo = {e: sum(1 for r in res if r["estado"] == e) for e in ("ok", "aviso", "erro", "info")}
+    if a.json:
+        print(json.dumps({"resumo": resumo, "verificacoes": res, "quando": time.strftime("%Y-%m-%d %H:%M")}, ensure_ascii=False))
+        return
+    simbolo = {"ok": "✔", "aviso": "⚠", "erro": "✘", "info": "ℹ"}
+    for r in res:
+        print(f"  {simbolo[r['estado']]} [{r['area']}] {r['titulo']}: {r['detalhe']}")
+        if r["correcao"]:
+            print(f"      → corrigir: vorticis-diagnostico corrigir {r['correcao']['id']}  ({r['correcao']['descricao']})")
+    print(f"\n{resumo['ok']} ok · {resumo['aviso']} aviso(s) · {resumo['erro']} erro(s)")
+    sys.exit(1 if resumo["erro"] else 0)
+
+
+def cmd_corrigir(a):
+    if a.id not in CORRECOES:
+        sys.exit(f"Não há correção automática para '{a.id}'. Correções: {', '.join(CORRECOES)}")
+    desc, cmd, root = CORRECOES[a.id]
+    if root and os.geteuid() != 0:
+        cmd = (["pkexec"] if tem("pkexec") else ["sudo"]) + cmd
+    print(f"{desc}\n" + ("[simulação] " if a.simular else "→ ") + " ".join(cmd))
+    if not a.simular:
+        sys.exit(subprocess.run(cmd).returncode)
+
+
+def cmd_relatorio(a):
+    destino = Path(a.arquivo or Path.home() / f"vorticis-relatorio-{time.strftime('%Y%m%d-%H%M')}.txt")
+    partes = ["# Relatório do Vorticis SO", time.strftime("%Y-%m-%d %H:%M"), ""]
+    for titulo, cmd in (("Sistema", [sys.executable, ferramenta("vorticis-sistema"), "info"]),
+                        ("Verificações", [sys.executable, ferramenta("vorticis-diagnostico"), "verificar"]),
+                        ("Dispositivos", [sys.executable, ferramenta("vorticis-dispositivos"), "listar"]),
+                        ("Erros do kernel", ["journalctl", "-k", "-b", "-p", "err", "--no-pager", "-q"]),
+                        ("Serviços com falha", ["systemctl", "--failed", "--no-pager"])):
+        _, saida, erro = rodar(cmd, timeout=90)
+        partes += [f"## {titulo}", saida or erro or "(vazio)", ""]
+    destino.write_text("\n".join(partes))
+    print(f"Relatório salvo em {destino}\n(Contém nomes de dispositivos e erros; não inclui senhas nem arquivos pessoais.)")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vorticis-diagnostico", description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("verificar"); p.add_argument("--json", action="store_true"); p.set_defaults(f=cmd_verificar)
+    p = sub.add_parser("corrigir"); p.add_argument("id"); p.add_argument("--simular", action="store_true"); p.set_defaults(f=cmd_corrigir)
+    p = sub.add_parser("relatorio"); p.add_argument("arquivo", nargs="?"); p.set_defaults(f=cmd_relatorio)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()

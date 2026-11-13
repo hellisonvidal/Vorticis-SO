@@ -107,7 +107,7 @@ def cmd_info(a):
             u = shutil.disk_usage(ponto)
             if u.total > 1024 ** 3:
                 discos.append({"ponto": ponto, "tipo": tipo, "total": u.total, "usado": u.used})
-    versao_v = ler("/etc/vorticis/versao", "0.2")
+    versao_v = ler("/usr/share/vorticis/versao") or ler("/etc/vorticis/versao", "?")
     info = {
         "sistema": f"Vorticis SO {versao_v}", "base": os_rel.get("PRETTY_NAME", "").strip('"'),
         "kernel": platform.release(), "cpu": cpu, "nucleos": os.cpu_count(), "gpu": gpu(),

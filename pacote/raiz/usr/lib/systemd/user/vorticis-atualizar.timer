@@ -1,0 +1,11 @@
+[Unit]
+Description=Vorticis SO — verificar atualizações a cada 12 horas
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=12h
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

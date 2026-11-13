@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Diagnóstico
+Comment=Verifica o sistema em busca de problemas
+Exec=vorticis-app diagnostico
+Icon=utilities-system-monitor
+Categories=System;Monitor;
+Terminal=false
+StartupWMClass=org.vorticis.Diagnostico

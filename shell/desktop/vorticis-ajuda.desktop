@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ajuda do Vorticis
+Comment=Manual e documentação do sistema
+Exec=vorticis-app ajuda
+Icon=help-browser
+Categories=Documentation;Utility;
+Terminal=false
+StartupWMClass=org.vorticis.Ajuda

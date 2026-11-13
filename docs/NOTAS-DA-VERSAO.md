@@ -1,3 +1,31 @@
+# Vorticis SO 0.3.0 — dispositivos, diagnóstico e atualizações
+
+Versão de testes (alfa): experimente primeiro numa máquina virtual ou num computador sem dados
+importantes.
+
+## Novidades da 0.3.0
+
+- **Dispositivos** (novo app): todo o hardware por categoria — processador, vídeo, monitores, som,
+  rede, Bluetooth, armazenamento, USB, teclado/mouse, câmeras, impressoras e bateria — com estado,
+  propriedades e ações: ativar/desativar, reiniciar driver, remover com segurança.
+- **Procurar drivers por dentro do gerenciador**: para cada dispositivo, os drivers e firmwares
+  recomendados com botão Instalar; busca no computador inteiro, atualização de BIOS/firmware (LVFS)
+  e kernel mais recente para hardware novo.
+- **Diagnóstico** (novo app): 16 verificações — serviços, pacotes, espaço e saúde dos discos,
+  memória, temperatura, erros do kernel, drivers, firmware, internet, DNS, firewall, relógio,
+  atualizações, bateria, segurança e pontos de restauração — com nota de saúde, botão Corrigir e
+  relatório para pedir ajuda.
+- **Atualizações por dentro do sistema**: o Vorticis agora é o pacote `vorticis-sistema`; novas
+  versões chegam pelas releases (com SHA-256 conferido), com aviso na área de trabalho a cada
+  12 horas, pela Central de Apps → Atualizações ou por Configurações → Atualizações.
+- **Documentação completa**: Manual do usuário, Referência de comandos (gerada automaticamente),
+  Como o Vorticis funciona e Guia de desenvolvimento — também no novo app **Ajuda**, com busca.
+- **Correção importante no instalador**: a imagem não trazia o GRUB para o disco; o sistema instalado
+  podia não iniciar. Agora o instalador grava o GRUB certo para UEFI ou BIOS (com Secure Boot via shim)
+  e configura criptografia, tela de boot e initramfs.
+
+---
+
 # Vorticis SO 0.2.1 — identidade visual
 
 Atualização da 0.2 "Correnteza". Versão de testes (alfa): experimente primeiro numa máquina

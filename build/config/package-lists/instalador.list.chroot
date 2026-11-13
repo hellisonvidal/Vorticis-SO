@@ -5,3 +5,14 @@ live-config
 live-config-systemd
 user-setup
 qt6-wayland
+# Carregador de boot para o sistema instalado (o Calamares grava o GRUB no disco)
+grub2-common
+grub-efi-amd64-bin
+grub-efi-amd64-signed
+grub-pc-bin
+shim-signed
+efibootmgr
+mokutil
+dosfstools
+xfsprogs
+cryptsetup-initramfs

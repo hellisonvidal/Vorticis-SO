@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ajuda do Vorticis</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .lateral { width: 250px; }
+    .doc { max-width: 860px; line-height: 1.6; font-size: 15px; }
+    .doc h1 { font-size: 26px; margin: 0 0 12px; }
+    .doc h2 { font-size: 20px; margin: 30px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--borda); }
+    .doc h3 { font-size: 16px; margin: 22px 0 6px; }
+    .doc code { background: var(--superficie-2); padding: 1px 6px; border-radius: 6px; font: 13px ui-monospace, "JetBrains Mono", monospace; }
+    .doc pre { background: rgba(0, 0, 0, .3); border: 1px solid var(--borda); border-radius: 10px; padding: 12px 14px; overflow: auto; }
+    .doc pre code { background: none; padding: 0; }
+    .doc table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+    .doc th, .doc td { border: 1px solid var(--borda); padding: 6px 10px; text-align: left; vertical-align: top; }
+    .doc th { background: var(--superficie); }
+    .doc blockquote { margin: 12px 0; padding: 8px 14px; border-left: 3px solid var(--destaque); background: var(--superficie); border-radius: 0 8px 8px 0; }
+    .doc img { max-width: 100%; border-radius: 10px; }
+    .doc mark { background: rgba(245, 179, 1, .45); color: inherit; border-radius: 3px; }
+    .indice { font-size: 13px; }
+    .indice a { display: block; padding: 3px 12px; color: var(--texto-suave); text-decoration: none; }
+    .indice a:hover { color: var(--texto); }
+    .indice a.h3 { padding-left: 24px; }
+    .resultado { padding: 10px 0; border-bottom: 1px solid var(--borda); cursor: pointer; }
+    .resultado small { color: var(--texto-suave); }
+  </style>
+</head>
+<body>
+  <header class="cabecalho">
+    <h1><span class="logo-app">❓</span> Ajuda do Vorticis</h1>
+    <span class="espaco"></span>
+    <input id="busca" class="campo" type="search" placeholder="Pesquisar na ajuda (ex.: Wi-Fi, drivers, Office)" style="width:min(380px,50vw)">
+  </header>
+  <div class="corpo">
+    <nav class="lateral" id="lateral"></nav>
+    <main class="conteudo"><article class="doc" id="doc"></article></main>
+  </div>
+  <script src="../comum/app.js"></script>
+  <script src="ajuda.js"></script>
+</body>
+</html>

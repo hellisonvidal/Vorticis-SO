@@ -38,7 +38,10 @@ ISO para pen-drive, instalador para Windows e instalador para Linux. Veja [`inst
 | Vorticis Music | [`shell/apps/musica`](shell/apps/musica) | Biblioteca, capas e tags ID3, artistas/álbuns, favoritos, fila, aleatório/repetir, equalizador de 5 bandas, visualizador, teclas de mídia |
 | Vorticis Video Player | [`shell/apps/video`](shell/apps/video) | Lista, legendas .srt/.vtt, velocidade, retomar de onde parou, captura de quadro, janela flutuante, atalhos |
 | Central de Apps | [`shell/apps/central`](shell/apps/central) + [`tools/vorticis-apps`](tools/vorticis-apps) | Gerenciador de aplicativos: 60+ apps selecionados, Flathub, Debian, Android e Windows; instalados e atualizações (sistema, apps, firmware) |
-| Ferramentas de sistema | [`shell/apps`](shell/apps) | Configurações, Monitor, Notas, Calculadora; backup e pontos de restauração |
+| Dispositivos | [`shell/apps/dispositivos`](shell/apps/dispositivos) + [`tools/vorticis-dispositivos`](tools/vorticis-dispositivos) | Gerenciador de dispositivos: hardware por categoria, estado, propriedades, ativar/desativar, reiniciar driver, ejetar e **procurar drivers por dispositivo** |
+| Diagnóstico | [`shell/apps/diagnostico`](shell/apps/diagnostico) + [`tools/vorticis-diagnostico`](tools/vorticis-diagnostico) | 16 verificações (serviços, pacotes, discos/SMART, memória, temperatura, drivers, rede, segurança...), nota de saúde, correções e relatório |
+| Atualizações | [`tools/vorticis-atualizar`](tools/vorticis-atualizar) + [`pacote/`](pacote/) | Novas versões do Vorticis direto das releases (pacote `vorticis-sistema`, SHA-256 conferido), aviso a cada 12 h, sistema/apps/firmware |
+| Ferramentas de sistema | [`shell/apps`](shell/apps) | Configurações, Monitor, Notas, Calculadora, Ajuda; backup e pontos de restauração |
 | Windows | [`tools/vorticis-compat`](tools/vorticis-compat) | Wine com prefixo por programa e receitas automáticas; VM Windows integrada para Office 365/AutoCAD/Adobe; 5 caminhos para Office |
 | Jogos e anti-cheat | [`tools/vorticis-jogos`](tools/vorticis-jogos) | Consulta se o anti-cheat de cada jogo funciona; Steam/Proton, EAC/BattlEye, Proton-GE |
 | Android | [`tools/vorticis-compat`](tools/vorticis-compat) | Waydroid: apps Android nativos, `.apk` com dois cliques |
@@ -50,7 +53,16 @@ ISO para pen-drive, instalador para Windows e instalador para Linux. Veja [`inst
 | Navegadores | [`tools/vorticis-navegadores`](tools/vorticis-navegadores) | Firefox, Chromium, Chrome, Brave, Edge, Opera, Vivaldi + padrão e aceleração por GPU |
 | Instaladores | [`installer/`](installer/) | Pen-drive (Calamares), a partir do Windows e a partir de um Linux em uso |
 
-Documentação: [Arquitetura](docs/ARQUITETURA.md) · [Compatibilidade](docs/COMPATIBILIDADE.md) · [Roteiro](docs/ROTEIRO.md) · [Notas da versão](docs/NOTAS-DA-VERSAO.md)
+## Documentação
+
+| Documento | Para quem |
+|---|---|
+| [Manual do usuário](docs/MANUAL.md) | quem usa o Vorticis (também no app **Ajuda**, dentro do sistema) |
+| [Programas de Windows e Android](docs/COMPATIBILIDADE.md) | o que roda e como |
+| [Referência de comandos](docs/REFERENCIA.md) | todas as ferramentas `vorticis-*` (gerada da ajuda de cada uma) |
+| [Como o Vorticis funciona](docs/ARQUITETURA.md) | visão técnica |
+| [Guia de desenvolvimento](docs/DESENVOLVIMENTO.md) | quem mantém ou contribui |
+| [Novidades](docs/NOTAS-DA-VERSAO.md) · [Roteiro](docs/ROTEIRO.md) | o que mudou e o que vem |
 
 ## Experimentar o visual agora (sem instalar nada)
 

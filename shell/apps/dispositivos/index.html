@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dispositivos</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .corpo { min-height: 0; }
+    .lista { width: 380px; flex-shrink: 0; overflow: auto; border-right: 1px solid var(--borda); padding: 10px; }
+    .categoria { margin-bottom: 4px; }
+    .categoria > button { width: 100%; border: 0; background: transparent; display: flex; gap: 8px; align-items: center; padding: 8px; border-radius: 8px; font-weight: 600; text-align: left; }
+    .categoria > button:hover { background: var(--superficie); }
+    .categoria > button .seta { width: 14px; color: var(--texto-suave); transition: transform .15s; }
+    .categoria.fechada > button .seta { transform: rotate(-90deg); }
+    .categoria.fechada .itens { display: none; }
+    .categoria .qtd { margin-left: auto; }
+    .item { width: 100%; border: 0; background: transparent; display: flex; gap: 8px; align-items: center; padding: 7px 8px 7px 30px; border-radius: 8px; text-align: left; font-size: 13px; }
+    .item:hover { background: var(--superficie-2); }
+    .item[aria-current="true"] { background: color-mix(in srgb, var(--destaque) 22%, transparent); }
+    .item .nome { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .estado { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--sucesso); }
+    .estado.sem-driver, .estado.aviso { background: #f5b301; }
+    .estado.desativado { background: #8a96a3; }
+    .estado.desconectado { background: transparent; border: 2px solid #8a96a3; }
+    .detalhe { flex: 1; overflow: auto; padding: 22px 26px; }
+    .detalhe h2 { margin: 0; font-size: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 14px; }
+    td { padding: 7px 0; border-bottom: 1px solid var(--borda); vertical-align: top; }
+    td:first-child { color: var(--texto-suave); width: 42%; padding-right: 12px; }
+    .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+    .sugestao { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+    .sugestao .texto { flex: 1; }
+    .resumo { display: flex; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 760px) { .lista { width: auto; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--borda); } }
+  </style>
+</head>
+<body>
+  <header class="cabecalho">
+    <h1><span class="logo-app">🧩</span> Dispositivos</h1>
+    <span class="espaco"></span>
+    <input id="busca" class="campo" type="search" placeholder="Buscar dispositivo">
+    <button class="botao" id="atualizar" title="Detectar novamente">⟳</button>
+    <button class="botao primario" id="procurar-todos">🔍 Procurar drivers</button>
+  </header>
+  <div class="corpo">
+    <nav class="lista" id="lista"></nav>
+    <main class="detalhe" id="detalhe"></main>
+  </div>
+  <script src="../comum/app.js"></script>
+  <script src="dispositivos.js"></script>
+</body>
+</html>

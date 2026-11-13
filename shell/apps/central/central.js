@@ -112,22 +112,44 @@
               Vorticis.toast(r.codigo === 0 ? `${x.nome} removido.` : "Falha ao remover."); render(); } })]))));
       }
     } else if (estado.vista === "atualizacoes") {
-      c.replaceChildren(el("h2", { texto: "Atualizações" }), el("p", { class: "sub", texto: "Sistema, apps Flatpak, Android e firmware (BIOS/dispositivos)" }),
+      const sub = "Vorticis SO, sistema, apps Flatpak, Android e firmware (BIOS/dispositivos)";
+      c.replaceChildren(el("h2", { texto: "Atualizações" }), el("p", { class: "sub", texto: sub }),
         el("div", { class: "vazio" }, [el("b", { texto: "🔄" }), "Procurando atualizações…"]));
-      const lista = (await Vorticis.executarJSON("vorticis-apps", ["atualizacoes", "--json"], [])) || [];
-      const btn = el("button", { class: "botao primario", texto: "Atualizar tudo", onclick: async () => {
-        btn.disabled = true; btn.textContent = "Atualizando…";
-        const r = await Vorticis.executar("vorticis-apps", ["atualizar"]);
-        Vorticis.toast(r.codigo === 0 ? "Tudo atualizado!" : "Algumas atualizações falharam."); render(); } });
-      c.replaceChildren(el("h2", { texto: "Atualizações" }), el("p", { class: "sub", texto: "Sistema, apps Flatpak, Android e firmware (BIOS/dispositivos)" }),
-        lista.length ? el("div", {}, [el("p", {}, [`${lista.length} atualização(ões) disponível(is). `, btn]),
-          el("div", { class: "cartao" }, lista.map((x) => el("div", { class: "linha" }, [el("span", { class: "chip", texto: x.tipo }),
-            el("div", { class: "texto", texto: x.nome }), el("small", { texto: x.versao })])))])
-          : el("div", { class: "vazio" }, [el("b", { texto: "✅" }), "Tudo em dia!"]));
+      const demo = { vorticis: { instalada: "0.3.0", mais_recente: "0.3.1", disponivel: true, nome: "Vorticis SO 0.3.1",
+        notas: "Correções e melhorias.", pagina: "https://github.com/hellisonvidal/Vorticis-SO/releases" },
+        sistema: [{ nome: "firefox-esr", versao: "128.5", tipo: "Sistema" }, { nome: "Discord", versao: "0.0.75", tipo: "Flatpak" }], total: 2 };
+      const d = (await Vorticis.executarJSON("vorticis-atualizar", ["verificar", "--json"], demo)) || demo;
+      const v = d.vorticis || {}, lista = d.sistema || [];
+      const atualizar = (args, rotulo) => async (e) => {
+        e.target.disabled = true; e.target.textContent = "Atualizando…";
+        const r = await Vorticis.executar("@terminal", ["vorticis-atualizar", "instalar", ...args], { codigo: 0, saida: "" });
+        Vorticis.toast(r.codigo === 0 ? `${rotulo}: acompanhe no terminal.` : "Não foi possível iniciar a atualização.");
+      };
+      const cartaoVorticis = el("div", { class: "cartao app-cartao", style: "margin-bottom:18px" }, [
+        el("div", { class: "icone", style: "--cor:#0a84ff", texto: "🌀" }),
+        el("div", { class: "texto" }, [
+          el("b", { texto: v.disponivel ? `Nova versão: ${v.nome || "Vorticis SO " + v.mais_recente}` : `Vorticis SO ${v.instalada || ""}` }),
+          el("small", { class: "suave", texto: v.erro ? v.erro : v.disponivel ? `Instalada: ${v.instalada}` : "Você está na versão mais recente do Vorticis." }),
+          v.disponivel && v.notas ? el("p", { texto: v.notas.replace(/[#*`]/g, "").split("\n").filter(Boolean).slice(0, 4).join(" · ").slice(0, 300) }) : null,
+          el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" }, [
+            v.disponivel ? el("button", { class: "botao primario", texto: "Atualizar o Vorticis", onclick: atualizar(["--so-vorticis"], "Atualização do Vorticis") }) : null,
+            v.pagina ? el("a", { class: "botao", href: v.pagina, target: "_blank", texto: "Ver novidades" }) : null,
+          ]),
+        ]),
+      ]);
+      const btnTudo = el("button", { class: "botao primario", texto: "Atualizar tudo", onclick: atualizar([], "Atualização completa") });
+      c.replaceChildren(el("h2", { texto: "Atualizações" }), el("p", { class: "sub", texto: sub }), cartaoVorticis,
+        lista.length || v.disponivel ? el("div", {}, [el("p", {}, [`${lista.length + (v.disponivel ? 1 : 0)} atualização(ões) disponível(is). `, btnTudo]),
+          lista.length ? el("div", { class: "cartao" }, lista.map((x) => el("div", { class: "linha" }, [el("span", { class: "chip", texto: x.tipo }),
+            el("div", { class: "texto", texto: x.nome }), el("small", { texto: x.versao || "" })]))) : null])
+          : el("div", { class: "vazio" }, [el("b", { texto: "✅" }), "Tudo em dia!"]),
+        el("p", { class: "suave", style: "margin-top:16px", texto: "Atualizações de segurança do Debian são instaladas automaticamente. A verificação de novidades roda a cada 12 horas e avisa na área de trabalho." }));
     }
   }
 
   let t;
   $("#busca").addEventListener("input", () => { clearTimeout(t); t = setTimeout(render, 250); });
+  const secaoInicial = new URLSearchParams(location.search).get("secao");
+  if (["instalados", "atualizacoes"].includes(secaoInicial)) estado.vista = secaoInicial;
   carregar();
 })();

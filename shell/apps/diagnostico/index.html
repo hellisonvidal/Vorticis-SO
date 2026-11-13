@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diagnóstico</title>
+  <link rel="stylesheet" href="../comum/app.css">
+  <style>
+    .topo { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+    .nota { width: 110px; height: 110px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; font-weight: 700;
+      background: conic-gradient(var(--cor-nota, var(--sucesso)) calc(var(--p) * 1%), var(--superficie-2) 0); position: relative; flex-shrink: 0; }
+    .nota::before { content: ""; position: absolute; inset: 10px; border-radius: 50%; background: var(--fundo-app); }
+    .nota span { position: relative; }
+    .topo .texto { flex: 1; min-width: 220px; }
+    .topo h2 { margin: 0 0 4px; }
+    .contagem { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .grupo h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-suave); margin: 18px 0 6px; }
+    .check { display: flex; gap: 12px; align-items: center; padding: 11px 14px; border-radius: 10px; background: var(--superficie); margin-bottom: 6px; }
+    .check .ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; flex-shrink: 0; font-weight: 700; }
+    .ic.ok { background: color-mix(in srgb, var(--sucesso) 25%, transparent); color: var(--sucesso); }
+    .ic.aviso { background: rgba(245, 179, 1, .22); color: #f5b301; }
+    .ic.erro { background: color-mix(in srgb, var(--perigo) 25%, transparent); color: var(--perigo); }
+    .ic.info { background: var(--superficie-2); color: var(--texto-suave); }
+    .check .texto { flex: 1; min-width: 0; }
+    .check small { display: block; color: var(--texto-suave); margin-top: 2px; }
+    .filtros { display: flex; gap: 6px; }
+    .filtros button[aria-pressed="true"] { background: var(--destaque-forte); color: #fff; border-color: transparent; }
+    .girando { display: inline-block; animation: girar 1s linear infinite; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header class="cabecalho">
+    <h1><span class="logo-app">🩺</span> Diagnóstico</h1>
+    <span class="espaco"></span>
+    <div class="filtros" id="filtros">
+      <button class="botao" data-f="todos" aria-pressed="true">Todos</button>
+      <button class="botao" data-f="problemas">Só problemas</button>
+    </div>
+    <button class="botao" id="relatorio">📄 Salvar relatório</button>
+    <button class="botao primario" id="verificar">⟳ Verificar de novo</button>
+  </header>
+  <main class="conteudo" id="conteudo"></main>
+  <script src="../comum/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    const { el } = Vorticis;
+    const $ = (s) => document.querySelector(s);
+    let dados = null, filtro = "todos";
+    const SIMBOLO = { ok: "✓", aviso: "!", erro: "✕", info: "i" };
+
+    const DEMO = { resumo: { ok: 11, aviso: 3, erro: 1, info: 2 }, quando: "agora", verificacoes: [
+      { id: "servicos", area: "Sistema", titulo: "Serviços do sistema", estado: "ok", detalhe: "Nenhum serviço com falha" },
+      { id: "pacotes", area: "Sistema", titulo: "Pacotes do sistema", estado: "ok", detalhe: "Todos os pacotes estão íntegros" },
+      { id: "atualizacoes", area: "Sistema", titulo: "Atualizações", estado: "aviso", detalhe: "12 atualização(ões) pendente(s) · Vorticis 0.3.1 disponível", correcao: { id: "atualizacoes", descricao: "Atualizar o sistema" } },
+      { id: "relogio", area: "Sistema", titulo: "Relógio sincronizado", estado: "ok", detalhe: "Sincronizado pela internet" },
+      { id: "espaco", area: "Armazenamento", titulo: "Espaço livre em /", estado: "aviso", detalhe: "9.8 GB livres (8%)", correcao: { id: "espaco", descricao: "Liberar espaço (caches, logs antigos, lixeira)" } },
+      { id: "smart", area: "Armazenamento", titulo: "Saúde do disco nvme0n1", estado: "ok", detalhe: "SMART: aprovado" },
+      { id: "memoria", area: "Desempenho", titulo: "Memória disponível", estado: "ok", detalhe: "61% livre" },
+      { id: "zram", area: "Desempenho", titulo: "Memória comprimida (zram)", estado: "ok", detalhe: "Ativa" },
+      { id: "temperatura", area: "Hardware", titulo: "Temperatura", estado: "ok", detalhe: "Máxima: 54 °C" },
+      { id: "kernel", area: "Hardware", titulo: "Erros do kernel", estado: "ok", detalhe: "Nenhum erro desde a inicialização" },
+      { id: "bateria", area: "Hardware", titulo: "Saúde da bateria BAT0", estado: "aviso", detalhe: "58% da capacidade original — considere trocar a bateria" },
+      { id: "drivers", area: "Dispositivos", titulo: "1 dispositivo(s) sem driver", estado: "erro", detalhe: "RTL8852BE PCIe 802.11ax Wireless", correcao: { id: "drivers", descricao: "Instalar drivers recomendados" } },
+      { id: "firmware", area: "Dispositivos", titulo: "Firmware dos dispositivos", estado: "ok", detalhe: "Nenhum firmware faltando" },
+      { id: "rede", area: "Rede", titulo: "Conexão com a internet", estado: "ok", detalhe: "Conectado" },
+      { id: "dns", area: "Rede", titulo: "Resolução de nomes (DNS)", estado: "ok", detalhe: "Funcionando" },
+      { id: "firewall", area: "Segurança", titulo: "Firewall", estado: "ok", detalhe: "Ativo: conexões de entrada bloqueadas" },
+      { id: "apparmor", area: "Segurança", titulo: "Isolamento de apps (AppArmor)", estado: "ok", detalhe: "Ativo" },
+      { id: "secureboot", area: "Segurança", titulo: "Inicialização segura (Secure Boot)", estado: "info", detalhe: "SecureBoot enabled" },
+      { id: "restauracao", area: "Proteção", titulo: "Pontos de restauração automáticos", estado: "info", detalhe: "Ligados" },
+    ] };
+
+    async function verificar() {
+      $("#verificar").disabled = true;
+      $("#conteudo").replaceChildren(el("div", { class: "vazio" }, [el("b", { class: "girando", texto: "🩺" }), "Verificando o sistema… isso leva alguns segundos."]));
+      dados = (await Vorticis.executarJSON("vorticis-diagnostico", ["verificar", "--json"], DEMO)) || DEMO;
+      $("#verificar").disabled = false;
+      render();
+    }
+
+    function render() {
+      const { resumo, verificacoes } = dados;
+      const avaliadas = resumo.ok + resumo.aviso + resumo.erro;
+      const nota = avaliadas ? Math.round(((resumo.ok + resumo.aviso * 0.5) / avaliadas) * 100) : 100;
+      const cor = resumo.erro ? "var(--perigo)" : resumo.aviso ? "#f5b301" : "var(--sucesso)";
+      const titulo = resumo.erro ? "Há problemas que precisam de atenção" : resumo.aviso ? "Tudo funcionando, com algumas recomendações" : "Seu sistema está saudável";
+      const lista = verificacoes.filter((v) => filtro === "todos" || v.estado === "aviso" || v.estado === "erro");
+      const areas = [...new Set(lista.map((v) => v.area))];
+      $("#conteudo").replaceChildren(
+        el("div", { class: "topo" }, [
+          el("div", { class: "nota", style: `--p:${nota};--cor-nota:${cor}` }, el("span", { texto: String(nota) })),
+          el("div", { class: "texto" }, [el("h2", { texto: titulo }), el("span", { class: "suave", texto: `Última verificação: ${dados.quando || "agora"}` }),
+            el("div", { class: "contagem" }, [el("span", { class: "chip ok", texto: `✓ ${resumo.ok} ok` }), el("span", { class: "chip", texto: `! ${resumo.aviso} aviso(s)` }),
+              el("span", { class: "chip", texto: `✕ ${resumo.erro} erro(s)` })])]),
+        ]),
+        ...(lista.length ? areas.map((area) => el("div", { class: "grupo" }, [el("h3", { texto: area }),
+          ...lista.filter((v) => v.area === area).map((v) => el("div", { class: "check" }, [
+            el("span", { class: "ic " + v.estado, texto: SIMBOLO[v.estado] }),
+            el("div", { class: "texto" }, [el("b", { texto: v.titulo }), el("small", { texto: v.detalhe })]),
+            v.correcao ? el("button", { class: "botao" + (v.estado === "erro" ? " primario" : ""), texto: "Corrigir", title: v.correcao.descricao,
+              onclick: () => corrigir(v) }) : null,
+            v.id === "drivers" ? el("button", { class: "botao", texto: "Ver dispositivos", onclick: () => Vorticis.executar("@abrir", ["dispositivos"], { codigo: 0 }).then(() => !Vorticis.noSistema && Vorticis.toast("Abra o app Dispositivos")) }) : null,
+          ]))])) : [el("div", { class: "vazio" }, [el("b", { texto: "✅" }), "Nenhum problema encontrado."])]));
+    }
+
+    async function corrigir(v) {
+      const r = await Vorticis.executar("@terminal", ["vorticis-diagnostico", "corrigir", v.correcao.id], { codigo: 0, saida: "" });
+      Vorticis.toast(r.codigo === 0 ? `${v.correcao.descricao}: em andamento no terminal. Depois, clique em “Verificar de novo”.` : "Não foi possível iniciar a correção.", 4000);
+    }
+
+    document.querySelectorAll("#filtros button").forEach((b) => (b.onclick = () => {
+      filtro = b.dataset.f;
+      document.querySelectorAll("#filtros button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      if (dados) render();
+    }));
+    $("#verificar").onclick = verificar;
+    $("#relatorio").onclick = async () => {
+      const r = await Vorticis.executar("vorticis-diagnostico", ["relatorio"], { codigo: 0, saida: "Relatório salvo em ~/vorticis-relatorio.txt" });
+      Vorticis.toast((r.saida || "").split("\n")[0], 5000);
+    };
+    verificar();
+  })();
+  </script>
+</body>
+</html>
