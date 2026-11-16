@@ -8,3 +8,7 @@ if [ ! -d /run/live/medium ]; then
 fi
 lxpolkit >/dev/null 2>&1 &
 kanshi >/dev/null 2>&1 &
+# Iniciado pelo instalador do Windows/Linux (vorticis.instalar): abre o instalador sozinho
+if grep -qw vorticis.instalar /proc/cmdline; then
+    (sleep 8; vorticis-instalar-sistema) >"$HOME/.cache/vorticis-instalador.log" 2>&1 &
+fi

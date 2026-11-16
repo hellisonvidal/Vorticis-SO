@@ -31,15 +31,19 @@ Sumário: [Instalação](#instalação) · [Área de trabalho](#área-de-trabalh
 
 ### 2. A partir do Windows (sem pen-drive)
 
-Baixe `Instalar-Vorticis.ps1` nas Releases, abra o **PowerShell como administrador** e rode:
+1. Baixe **`Instalar-Vorticis.exe`** nas [Releases](https://github.com/hellisonvidal/Vorticis-SO/releases)
+   e dê dois cliques. Se o Windows mostrar "O Windows protegeu o computador", clique em
+   **Mais informações → Executar assim mesmo** (o instalador ainda não tem assinatura digital).
+2. Aceite o pedido de administrador e clique em **Instalar**. Ele baixa o Vorticis, confere o
+   arquivo, separa 6 GB do disco C: para o instalador e prepara a inicialização — sem apagar nada.
+3. Clique em **Reiniciar agora**. O computador entra no Vorticis e o instalador abre sozinho, já em
+   **Instalar ao lado do Windows**: escolha quanto espaço dar a cada sistema, crie seu usuário e
+   confirme.
 
-```
-powershell -ExecutionPolicy Bypass -File .\Instalar-Vorticis.ps1 -EspacoGB 80
-```
-
-O script reduz o disco C:, cria uma pequena partição com o instalador e agenda um boot no Vorticis.
-Depois de reiniciar, escolha **Instalar ao lado do Windows** no instalador. Requer UEFI. Se o
-BitLocker estiver ativo, tenha a chave de recuperação em mãos. Use `-Simular` para ver os passos antes.
+Requer UEFI e Windows de 64 bits. Se o BitLocker estiver ativo, anote a chave de recuperação antes;
+nesse caso o espaço do Vorticis é separado já no Windows e, no instalador, você escolhe
+**Substituir uma partição** e o espaço livre. Usuários avançados podem rodar o
+`Instalar-Vorticis.ps1` no PowerShell como administrador (`-Simular` mostra os passos sem mudar nada).
 
 ### 3. A partir de um Linux
 
@@ -52,6 +56,8 @@ sudo sh vorticis-instalar-daqui --pendrive /dev/sdX   # ou grava um pen-drive
 
 - **Instalar ao lado** mantém o sistema atual (Windows/Linux) e mostra um menu na inicialização.
 - **Apagar disco** usa o disco inteiro para o Vorticis.
+- Com mais de um disco, escolha qual usar em **Selecionar dispositivo de armazenamento**, no topo
+  da tela de particionamento. Para usar só o segundo disco, selecione-o e marque **Apagar disco**.
 - O sistema de arquivos padrão é o **Btrfs**, que permite pontos de restauração.
 - Você pode marcar **Criptografar o sistema**: será pedida uma senha a cada inicialização.
 - O primeiro usuário criado é o **Administrador**.
@@ -253,6 +259,23 @@ Configurações → Desempenho → Liberar espaço.
 
 **Algo parou de funcionar depois de uma atualização.** Configurações → Backup e restauração →
 Restaurar sistema (escolha um ponto anterior à atualização).
+
+**Só aparece um disco na instalação.** Primeiro abra a lista **Selecionar dispositivo de
+armazenamento**, no topo da tela de particionamento: os outros discos ficam lá. Se o disco não
+estiver na lista, quase sempre a BIOS está no modo **RAID / Intel RST** (comum em notebooks), que
+esconde discos do Linux. Para mudar para **AHCI** sem estragar o Windows:
+
+1. No Windows, abra o *Prompt de Comando* como administrador e rode `bcdedit /set {current} safeboot minimal`.
+2. Reinicie, entre na BIOS (F2, Del ou F10) e troque *SATA Mode* / *Storage* de **RAID** ou
+   **Intel RST** para **AHCI** (em alguns modelos: desative *VMD*). Salve.
+3. O Windows abre em modo de segurança e instala o driver AHCI. Rode
+   `bcdedit /deletevalue {current} safeboot` e reinicie.
+4. Comece a instalação do Vorticis de novo: todos os discos aparecem.
+
+Se os discos formam um volume RAID de verdade (dois discos espelhados), não troque para AHCI: o
+Vorticis monta esse volume sozinho e ele aparece como um disco só. Se o disco aparece mas não deixa
+instalar, ele pode ser um *disco dinâmico* ou *Espaços de Armazenamento* do Windows — converta para
+disco básico no Gerenciamento de Disco (isso apaga os dados dele).
 
 **Esqueci a senha.** Peça a outro administrador para redefinir em Configurações → Usuários. Se
 você for o único administrador, inicie pelo pen-drive e use `passwd` no sistema instalado.

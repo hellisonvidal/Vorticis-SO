@@ -105,7 +105,7 @@ menuentry "Vorticis SO (live / instalar)" --class vorticis {
     insmod iso9660
     search --no-floppy --set=root --file /vorticis/vorticis.iso
     loopback loop /vorticis/vorticis.iso
-    linux (loop)/live/vmlinuz boot=live findiso=/vorticis/vorticis.iso components quiet splash locales=pt_BR.UTF-8 keyboard-layouts=br
+    linux (loop)/live/vmlinuz boot=live findiso=/vorticis/vorticis.iso components quiet splash locales=pt_BR.UTF-8 keyboard-layouts=br timezone=America/Sao_Paulo username=vorticis hostname=vorticis vorticis.instalar
     initrd (loop)/live/initrd.img
 }'
     if [ "$SIMULAR" -eq 1 ]; then

@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 build/*.deb
 build/*.deb.sha256
+installer/windows/Instalar-Vorticis.exe

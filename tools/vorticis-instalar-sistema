@@ -7,6 +7,16 @@ SESSAO="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${WAYLAND_DISPLAY:-wayland-0}"
 # Arquivo deixado pelo live-build que atrapalha o particionamento
 sudo mv /etc/fstab /etc/fstab.orig.calamares 2>/dev/null || true
 sudo install -d -m 700 /run/user/0
+# Volumes RAID da Intel (RST/IMSM) e de outros controladores: monta para o instalador enxergar
+if command -v mdadm >/dev/null 2>&1; then sudo mdadm --assemble --scan >/dev/null 2>&1 || true; fi
+# Discos escondidos pelo modo RAID/Intel RST da BIOS: o Linux não os vê até mudar para AHCI
+if sudo dmesg 2>/dev/null | grep -qi "remapped NVMe" ||
+   lspci 2>/dev/null | grep -i "RAID bus controller" | grep -qvi "Volume Management Device"; then
+    [ -e /proc/mdstat ] && grep -q "^md" /proc/mdstat || notify-send -u critical -i vorticis -a "Instalador do Vorticis" \
+        "Algum disco pode não aparecer" \
+        "A BIOS está no modo RAID/Intel RST e esconde discos do Linux. Para ver todos: no Windows, prepare o modo AHCI e mude na BIOS (Manual → Solução de problemas → Só aparece um disco)." \
+        >/dev/null 2>&1 || true
+fi
 status=0
 sudo env WAYLAND_DISPLAY="$SESSAO" XDG_RUNTIME_DIR=/run/user/0 \
     QT_QPA_PLATFORM="wayland;xcb" DISPLAY="${DISPLAY:-}" QT_AUTO_SCREEN_SCALE_FACTOR=1 \

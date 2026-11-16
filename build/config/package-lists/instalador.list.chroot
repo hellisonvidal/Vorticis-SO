@@ -14,5 +14,10 @@ shim-signed
 efibootmgr
 mokutil
 dosfstools
+# Redimensionar a partição do Windows ("Instalar ao lado") e ler pen-drives exFAT
+ntfs-3g
+exfatprogs
+# Discos em RAID da Intel (RST/IMSM) e RAID por software aparecem no instalador
+mdadm
 xfsprogs
 cryptsetup-initramfs

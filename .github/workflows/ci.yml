@@ -57,9 +57,33 @@ jobs:
       - name: JSON válidos
         run: for f in shell/themes/*.json shell/apps/central/catalogo.json tools/compat/receitas.json; do python3 -m json.tool "$f" > /dev/null; done
 
+  windows:
+    # O instalador para Windows, testado num Windows de verdade
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sintaxe e análise (PSScriptAnalyzer)
+        shell: powershell
+        run: |
+          $t = $null; $e = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\installer\windows\Instalar-Vorticis.ps1", [ref]$t, [ref]$e) | Out-Null
+          if ($e.Count) { $e | ForEach-Object { "$($_.Extent.StartLineNumber): $($_.Message)" }; exit 1 }
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = Invoke-ScriptAnalyzer installer\windows\Instalar-Vorticis.ps1 -Severity Error
+          $r | Format-Table -AutoSize
+          if ($r) { exit 1 }
+      - name: Instalador em modo simulação (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File installer\windows\Instalar-Vorticis.ps1 -Simular
+      - name: Gerar Instalar-Vorticis.exe
+        shell: powershell
+        run: |
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /V2 /DVERSAO=0.0.0 installer\windows\instalador.nsi
+          if (-not (Test-Path installer\windows\Instalar-Vorticis.exe)) { exit 1 }
+
   iso:
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.gerar_iso || inputs.publicar_versao != ''))
-    needs: verificar
+    needs: [verificar, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -80,6 +104,12 @@ jobs:
             -e VORTICIS_TRABALHO=/tmp/vorticis debian:trixie \
             bash -c "apt-get update && apt-get install -y live-build ca-certificates curl && ./build/build.sh"
           ls -la build/
+      - name: Gerar Instalar-Vorticis.exe
+        run: |
+          sudo apt-get install -y nsis
+          VNUM=$(echo "$VERSAO" | grep -oE '^[0-9]+(\.[0-9]+){0,2}')
+          case "$VNUM" in *.*.*) ;; *.*) VNUM="$VNUM.0" ;; *) VNUM="0.0.0" ;; esac
+          makensis -V2 -DVERSAO="$VNUM" installer/windows/instalador.nsi
       - name: Conferir tamanho (limite de 2 GiB por arquivo nas releases do GitHub)
         run: |
           TAM=$(stat -c %s build/vorticis-*.iso)
@@ -104,6 +134,7 @@ jobs:
           body_path: docs/NOTAS-DA-VERSAO.md
           files: |
             build/vorticis-*
+            installer/windows/Instalar-Vorticis.exe
             installer/windows/Instalar-Vorticis.ps1
             installer/windows/vorticis.ico
             installer/linux/vorticis-instalar-daqui

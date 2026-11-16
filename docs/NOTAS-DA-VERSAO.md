@@ -1,7 +1,21 @@
-# Vorticis SO 0.3.0 — dispositivos, diagnóstico e atualizações
+# Vorticis SO 0.3.1 — instalar pelo Windows com dois cliques
 
 Versão de testes (alfa): experimente primeiro numa máquina virtual ou num computador sem dados
 importantes.
+
+## Novidades da 0.3.1
+
+- **Instalar-Vorticis.exe**: instalar a partir do Windows ficou com dois cliques — uma janela com o
+  botão **Instalar** baixa o sistema, confere o arquivo, prepara o disco e a inicialização. Ao
+  reiniciar, o instalador do Vorticis abre sozinho em **Instalar ao lado do Windows**.
+- **Instalar ao lado do Windows** voltou a funcionar: faltava a ferramenta que reduz a partição NTFS.
+- **Mais de um disco**: volumes RAID da Intel (RST) aparecem no instalador, e o Vorticis avisa — no
+  Windows e no instalador — quando o modo RAID da BIOS esconde discos, com o passo a passo para AHCI.
+- O instalador a partir de um Linux também abre o instalador sozinho.
+- Correções: Ajuda, temas e perfis não carregavam; apps falhavam sem aceleração 3D; Diagnóstico
+  mais rápido e avisando quando está sem internet; a tela não bloqueia mais no modo live.
+
+# Vorticis SO 0.3.0 — dispositivos, diagnóstico e atualizações
 
 ## Novidades da 0.3.0
 
