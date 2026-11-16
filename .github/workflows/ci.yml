@@ -78,7 +78,9 @@ jobs:
       - name: Gerar Instalar-Vorticis.exe
         shell: powershell
         run: |
-          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /V2 /DVERSAO=0.0.0 installer\windows\instalador.nsi
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress | Out-Null }
+          & $nsis /V2 /DVERSAO=0.0.0 installer\windows\instalador.nsi
           if (-not (Test-Path installer\windows\Instalar-Vorticis.exe)) { exit 1 }
 
   iso:
